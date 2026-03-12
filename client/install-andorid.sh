@@ -4,7 +4,7 @@
 
 set -e
 
-AGENT_URL="https://raw.githubusercontent.com/YOUR_USERNAME/grab/main/phone/agent.py"
+AGENT_URL="https://raw.githubusercontent.com/yusuf-bot/grab/main/phone/agent.py"
 OUTPUT_DIR="/sdcard/Download"
 AGENT_PORT=9090
 LOG_DIR="$HOME/.grab"

@@ -94,7 +94,7 @@ if [ -f "$SCRIPT_DIR/agent.py" ]; then
     ok "Copied agent.py from local directory"
 else
     info "Downloading agent.py…"
-    curl -fsSL "https://raw.githubusercontent.com/YOUR_USERNAME/grab/main/phone/agent.py" \
+    curl -fsSL "https://raw.githubusercontent.com/yusuf-bot/grab/main/client/agent.py" \
         -o "$INSTALL_BIN/grab-agent" \
         || err "Failed to download agent.py — place agent.py next to this script"
     ok "Downloaded agent.py"
