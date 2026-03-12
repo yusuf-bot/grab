@@ -1,0 +1,18 @@
+# secrets — never commit these
+.env
+*.env
+server/.env
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Downloads / output
+downloads/
+*.log
+*.zip
+*.mp4
+*.srt
+
+# macOS
+.DS_Store

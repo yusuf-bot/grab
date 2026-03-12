@@ -22,16 +22,37 @@ import time
 import urllib.request
 import urllib.parse
 import json
+from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Header, Depends, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
+# ── Load .env file if present ─────────────────────────────────────────────────
+def _load_env(path=".env"):
+    p = Path(path)
+    if not p.exists():
+        return
+    for line in p.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, val = line.partition("=")
+        val = val.strip().strip('"').strip("'")
+        os.environ.setdefault(key.strip(), val)
+
+_load_env()
+
 app = FastAPI()
 
-API_KEY   = os.environ.get("API_KEY",  "changeme123")
-OMDB_KEY  = os.environ.get("OMDB_KEY", "612eb370")
+API_KEY   = os.environ.get("API_KEY",  "")
+OMDB_KEY  = os.environ.get("OMDB_KEY", "")
 TOR_PROXY = os.environ.get("TOR_PROXY", None)
+
+if not API_KEY:
+    raise RuntimeError("API_KEY is not set. Add it to your .env file.")
+if not OMDB_KEY:
+    raise RuntimeError("OMDB_KEY is not set. Add it to your .env file.")
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
@@ -211,4 +232,4 @@ async def ui():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=9090)
+    uvicorn.run(app, host="0.0.0.0", port=8000)

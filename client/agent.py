@@ -28,8 +28,35 @@ import zipfile
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
+# ── Load .env file if present ────────────────────────────────────────────────
+def _load_env(path=None):
+    candidates = [
+        path,
+        Path(__file__).parent / ".env",
+        Path.home() / ".grab" / ".env",
+    ]
+    for p in candidates:
+        if p and Path(p).exists():
+            for line in Path(p).read_text().splitlines():
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, _, val = line.partition("=")
+                val = val.strip().strip('"').strip("'")
+                os.environ.setdefault(key.strip(), val)
+            break
+
+_load_env()
+
+# ── Config ────────────────────────────────────────────────────────────────────
 PORT       = int(os.environ.get("AGENT_PORT", 9090))
-OUTPUT_DIR = Path(os.environ.get("OUTPUT_DIR", str(Path.home() / "storage" / "downloads")))
+
+_default_out = (
+    "/sdcard/Download"
+    if os.path.exists("/sdcard")
+    else str(Path.home() / "Downloads")
+)
+OUTPUT_DIR = Path(os.environ.get("OUTPUT_DIR", _default_out))
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # Active jobs: id → {status, label, progress, file, error}
