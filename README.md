@@ -160,8 +160,11 @@ uvicorn server:app --host 0.0.0.0 --port 8000
 3. Open Termux and run:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/yusuf-bot/grab/main/client/install-android.sh | bash
+curl -fsSL https://raw.githubusercontent.com/yusuf-bot/grab/main/client/install-android.sh -o install.sh
+bash install.sh
 ```
+
+> **Do not pipe directly to bash** (`curl | bash`) — the interactive prompts will break.
 
 The script will:
 - Install Python, ffmpeg, and cloudflared
@@ -175,8 +178,11 @@ The script will:
 ### Linux / macOS (one command)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/yusuf-bot/grab/main/client/install-linux.sh | bash
+curl -fsSL https://raw.githubusercontent.com/yusuf-bot/grab/main/client/install-linux.sh -o install.sh
+bash install.sh
 ```
+
+> **Do not pipe directly to bash** (`curl | bash`) — the interactive prompts will break.
 
 The script will:
 - Detect your OS and install ffmpeg and cloudflared

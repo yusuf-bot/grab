@@ -41,9 +41,21 @@ install_pkg() {
     fi
 }
 
-install_pkg python       python3
-install_pkg ffmpeg       ffmpeg
-install_pkg cloudflared  cloudflared
+install_pkg python  python3
+install_pkg ffmpeg  ffmpeg
+
+# cloudflared: pkg can claim installed but leave no binary — always verify and fallback
+hdr "Installing cloudflared"
+pkg install -y cloudflared 2>/dev/null | tail -1
+if ! command -v cloudflared &>/dev/null; then
+    info "pkg binary missing, downloading arm64 directly…"
+    curl -fsSL "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64" \
+        -o "$PREFIX/bin/cloudflared" \
+        || err "Failed to download cloudflared"
+    chmod +x "$PREFIX/bin/cloudflared"
+fi
+command -v cloudflared &>/dev/null || err "cloudflared install failed"
+ok "cloudflared ready"
 
 # ── Storage access ────────────────────────────────────────────────────────────
 hdr "Storage access"

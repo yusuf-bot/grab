@@ -55,10 +55,7 @@ fi
 
 # ── cloudflared ───────────────────────────────────────────────────────────────
 hdr "Checking cloudflared"
-if command -v cloudflared &>/dev/null; then
-    ok "cloudflared already installed"
-else
-    info "Installing cloudflared…"
+_install_cloudflared() {
     ARCH=$(uname -m)
     if [[ "$OSTYPE" == "darwin"* ]]; then
         brew install cloudflared
@@ -74,8 +71,22 @@ else
         err "Unknown arch: $ARCH — download cloudflared manually from https://github.com/cloudflare/cloudflared/releases"
     fi
     export PATH="$INSTALL_BIN:$PATH"
-    ok "cloudflared installed"
+}
+
+if command -v cloudflared &>/dev/null; then
+    ok "cloudflared already installed"
+else
+    info "Installing cloudflared…"
+    _install_cloudflared
 fi
+
+# verify binary actually works — package managers can lie
+if ! cloudflared --version &>/dev/null; then
+    info "cloudflared binary broken, re-downloading directly…"
+    _install_cloudflared
+fi
+command -v cloudflared &>/dev/null || err "cloudflared install failed"
+ok "cloudflared ready"
 
 # ── Install agent.py ──────────────────────────────────────────────────────────
 hdr "Installing grab-agent"
