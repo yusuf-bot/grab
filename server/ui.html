@@ -1,0 +1,872 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>grab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:       #0e0e0f;
+    --surface:  #181819;
+    --border:   #2a2a2c;
+    --text:     #e8e8e6;
+    --muted:    #6b6b6e;
+    --accent:   #c8f065;
+    --danger:   #f06565;
+    --mono:     'DM Mono', monospace;
+    --sans:     'DM Sans', sans-serif;
+    --radius:   12px;
+  }
+
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 15px;
+    min-height: 100dvh;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Layout ── */
+  #app {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 24px 16px env(safe-area-inset-bottom, 24px);
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  /* ── Header ── */
+  header {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    padding-top: env(safe-area-inset-top, 0);
+  }
+  header h1 {
+    font-family: var(--mono);
+    font-size: 22px;
+    font-weight: 500;
+    letter-spacing: -0.5px;
+    color: var(--accent);
+  }
+  header span {
+    font-size: 12px;
+    color: var(--muted);
+    font-family: var(--mono);
+  }
+
+  /* ── Agent status pill ── */
+  #agent-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-family: var(--mono);
+    color: var(--muted);
+    cursor: pointer;
+    margin-left: auto;
+  }
+  #agent-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--muted);
+    transition: background 0.3s;
+  }
+  #agent-dot.online  { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+  #agent-dot.offline { background: var(--danger); }
+
+  /* ── Search bar ── */
+  .search-wrap {
+    display: flex;
+    gap: 8px;
+  }
+  input[type="text"] {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 15px;
+    padding: 12px 14px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  input[type="text"]:focus { border-color: var(--accent); }
+  input[type="text"]::placeholder { color: var(--muted); }
+
+  button {
+    cursor: pointer;
+    border: none;
+    font-family: var(--sans);
+    font-size: 14px;
+    font-weight: 500;
+    border-radius: var(--radius);
+    transition: opacity 0.15s, transform 0.1s;
+  }
+  button:active { transform: scale(0.97); }
+  button:disabled { opacity: 0.4; cursor: default; }
+
+  .btn-primary {
+    background: var(--accent);
+    color: #0e0e0f;
+    padding: 12px 18px;
+  }
+  .btn-ghost {
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 10px 14px;
+  }
+  .btn-sm {
+    padding: 7px 12px;
+    font-size: 13px;
+  }
+
+  /* ── Section titles ── */
+  .section-title {
+    font-size: 11px;
+    font-family: var(--mono);
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+
+  /* ── Cards / list items ── */
+  .card-list { display: flex; flex-direction: column; gap: 6px; }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 13px 14px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .card:hover { border-color: #444; background: #1e1e1f; }
+  .card.selected { border-color: var(--accent); }
+
+  .card-body { flex: 1; min-width: 0; }
+  .card-title {
+    font-weight: 500;
+    font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .card-sub {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 2px;
+    font-family: var(--mono);
+  }
+
+  .tag {
+    font-size: 10px;
+    font-family: var(--mono);
+    padding: 3px 7px;
+    border-radius: 6px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .tag-series { background: #1a2a1a; color: var(--accent); }
+  .tag-movie  { background: #1a1a2a; color: #a0a0f0; }
+
+  /* ── Season / episode grid ── */
+  .season-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+    gap: 8px;
+  }
+  .season-btn {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    padding: 12px 8px;
+    font-size: 13px;
+    text-align: center;
+    font-family: var(--mono);
+  }
+  .season-btn:hover { border-color: #555; }
+  .season-btn.selected { border-color: var(--accent); color: var(--accent); }
+
+  .ep-list { display: flex; flex-direction: column; gap: 5px; }
+  .ep-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .ep-row:hover { border-color: #555; }
+  .ep-row.selected { border-color: var(--accent); background: #141f00; }
+  .ep-num {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--accent);
+    width: 32px;
+    flex-shrink: 0;
+  }
+  .ep-title {
+    flex: 1;
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .ep-rating {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    flex-shrink: 0;
+  }
+
+  /* ── Selection bar ── */
+  .selection-bar {
+    position: sticky;
+    bottom: 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    backdrop-filter: blur(8px);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  }
+  .selection-label {
+    flex: 1;
+    font-size: 13px;
+    color: var(--muted);
+    font-family: var(--mono);
+  }
+
+  /* ── Back button ── */
+  .back-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--muted);
+    background: none;
+    padding: 6px 0;
+    font-family: var(--mono);
+  }
+  .back-btn:hover { color: var(--text); }
+
+  /* ── Jobs ── */
+  .job-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .job-header { display: flex; align-items: center; gap: 8px; }
+  .job-label { flex: 1; font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .job-status {
+    font-size: 10px;
+    font-family: var(--mono);
+    padding: 3px 8px;
+    border-radius: 6px;
+    flex-shrink: 0;
+  }
+  .status-queued      { background: #222; color: var(--muted); }
+  .status-downloading { background: #1a2a1a; color: var(--accent); }
+  .status-done        { background: #1a2a1a; color: var(--accent); }
+  .status-failed      { background: #2a1a1a; color: var(--danger); }
+  .job-progress { font-size: 12px; color: var(--muted); font-family: var(--mono); }
+
+  /* ── Progress bar ── */
+  .progress-track {
+    height: 2px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 2px;
+    width: 0%;
+    transition: width 0.4s ease;
+  }
+  .progress-fill.indeterminate {
+    width: 40%;
+    animation: slide 1.4s ease-in-out infinite;
+  }
+  @keyframes slide {
+    0%   { transform: translateX(-100%); }
+    100% { transform: translateX(350%); }
+  }
+
+  /* ── Movie detail ── */
+  .movie-detail {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .movie-title { font-size: 18px; font-weight: 500; }
+  .movie-meta { font-size: 12px; color: var(--muted); font-family: var(--mono); }
+  .movie-plot { font-size: 13px; color: #aaa; line-height: 1.5; }
+
+  /* ── Agent config modal ── */
+  .modal-bg {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.7);
+    display: flex; align-items: flex-end;
+    z-index: 100;
+    backdrop-filter: blur(4px);
+  }
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius) var(--radius) 0 0;
+    padding: 24px 20px;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .modal h2 { font-size: 15px; font-weight: 500; }
+  .modal label { font-size: 12px; color: var(--muted); font-family: var(--mono); display: block; margin-bottom: 4px; }
+  .modal input { width: 100%; }
+
+  /* ── Spinner ── */
+  .spinner {
+    width: 18px; height: 18px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Empty state ── */
+  .empty {
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+    padding: 32px 0;
+    font-family: var(--mono);
+  }
+
+  /* ── Tabs ── */
+  .tabs {
+    display: flex;
+    gap: 4px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 3px;
+  }
+  .tab {
+    flex: 1;
+    text-align: center;
+    padding: 8px;
+    border-radius: 8px;
+    font-size: 13px;
+    color: var(--muted);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+    font-family: var(--mono);
+    background: none;
+    border: none;
+  }
+  .tab.active { background: var(--bg); color: var(--text); }
+
+  /* ── Divider ── */
+  hr { border: none; border-top: 1px solid var(--border); }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- Header -->
+  <header>
+    <h1>grab</h1>
+    <span id="view-label">search</span>
+    <div id="agent-status" onclick="openAgentModal()">
+      <div id="agent-dot"></div>
+      <span id="agent-text">agent</span>
+    </div>
+  </header>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('search')">Search</button>
+    <button class="tab" onclick="switchTab('jobs')">Downloads</button>
+  </div>
+
+  <!-- ── Search tab ── -->
+  <div id="tab-search">
+
+    <!-- Search input -->
+    <div id="view-search">
+      <div class="search-wrap">
+        <input type="text" id="search-input" placeholder="Search movies & shows…" onkeydown="if(event.key==='Enter') doSearch()">
+        <button class="btn-primary" onclick="doSearch()" id="search-btn">Go</button>
+      </div>
+    </div>
+
+    <!-- Results -->
+    <div id="view-results" class="hidden">
+      <button class="back-btn" onclick="goBack('search')">← back</button>
+      <p class="section-title" style="margin-top:12px">Results</p>
+      <div id="results-list" class="card-list"></div>
+    </div>
+
+    <!-- Season picker -->
+    <div id="view-seasons" class="hidden">
+      <button class="back-btn" onclick="goBack('results')">← back</button>
+      <div id="season-header" style="margin-top:12px"></div>
+      <div id="season-grid" class="season-grid" style="margin-top:10px"></div>
+    </div>
+
+    <!-- Episode picker -->
+    <div id="view-episodes" class="hidden">
+      <button class="back-btn" onclick="goBack('seasons')">← back</button>
+      <div id="ep-header" style="margin-top:12px"></div>
+      <div id="ep-list" class="ep-list" style="margin-top:10px"></div>
+      <div class="selection-bar hidden" id="sel-bar">
+        <span class="selection-label" id="sel-label">0 selected</span>
+        <button class="btn-ghost btn-sm" onclick="clearSelection()">Clear</button>
+        <button class="btn-primary btn-sm" onclick="downloadSelected()">Download</button>
+      </div>
+    </div>
+
+    <!-- Movie detail -->
+    <div id="view-movie" class="hidden">
+      <button class="back-btn" onclick="goBack('results')">← back</button>
+      <div id="movie-detail" style="margin-top:12px"></div>
+    </div>
+
+  </div>
+
+  <!-- ── Downloads tab ── -->
+  <div id="tab-jobs" class="hidden">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <p class="section-title" style="margin:0">Downloads</p>
+      <button class="btn-ghost btn-sm" onclick="clearDoneJobs()">Clear done</button>
+    </div>
+    <div id="jobs-list" class="card-list">
+      <div class="empty">No downloads yet</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Agent config modal -->
+<div id="agent-modal" class="modal-bg hidden" onclick="if(event.target===this) closeAgentModal()">
+  <div class="modal">
+    <h2>Phone Agent</h2>
+    <div>
+      <label>Agent URL (your phone's IP + port 9090)</label>
+      <input type="text" id="agent-url-input" placeholder="http://192.168.1.x:9090">
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn-ghost" style="flex:1" onclick="closeAgentModal()">Cancel</button>
+      <button class="btn-primary" style="flex:1" onclick="saveAgent()">Save & Test</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Config ────────────────────────────────────────────────────────────────────
+
+const SERVER_URL = window.location.origin;                   // VPS
+const API_KEY    = localStorage.getItem("api_key") || prompt("Enter API key:") || "";
+if (API_KEY) localStorage.setItem("api_key", API_KEY);
+
+let agentUrl = localStorage.getItem("agent_url") || "";
+
+// ── State ─────────────────────────────────────────────────────────────────────
+
+let currentResults  = [];
+let currentDetail   = null;
+let currentEpisodes = [];
+let currentSeason   = null;
+let selectedEps     = new Set();
+let localJobs       = JSON.parse(localStorage.getItem("jobs") || "[]");
+
+// ── Tab switching ─────────────────────────────────────────────────────────────
+
+function switchTab(tab) {
+  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+  event.target.classList.add("active");
+  document.getElementById("tab-search").classList.toggle("hidden", tab !== "search");
+  document.getElementById("tab-jobs").classList.toggle("hidden",   tab !== "jobs");
+  if (tab === "jobs") renderJobs();
+}
+
+// ── API helpers ───────────────────────────────────────────────────────────────
+
+async function api(path, opts = {}) {
+  const r = await fetch(SERVER_URL + path, {
+    ...opts,
+    headers: { "x-api-key": API_KEY, "Content-Type": "application/json", ...(opts.headers || {}) }
+  });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+async function agentPost(path, body) {
+  if (!agentUrl) throw new Error("Agent URL not set — tap the dot in the header");
+  const r = await fetch(agentUrl + path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+async function agentGet(path) {
+  const r = await fetch(agentUrl + path);
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+// ── Agent status ──────────────────────────────────────────────────────────────
+
+async function checkAgent() {
+  const dot  = document.getElementById("agent-dot");
+  const text = document.getElementById("agent-text");
+  if (!agentUrl) { dot.className = ""; text.textContent = "agent"; return; }
+  try {
+    await fetch(agentUrl + "/health", { signal: AbortSignal.timeout(3000) });
+    dot.className   = "online";
+    text.textContent = "online";
+  } catch {
+    dot.className   = "offline";
+    text.textContent = "offline";
+  }
+}
+
+function openAgentModal() {
+  document.getElementById("agent-url-input").value = agentUrl;
+  document.getElementById("agent-modal").classList.remove("hidden");
+}
+function closeAgentModal() {
+  document.getElementById("agent-modal").classList.add("hidden");
+}
+async function saveAgent() {
+  agentUrl = document.getElementById("agent-url-input").value.trim().replace(/\/$/, "");
+  localStorage.setItem("agent_url", agentUrl);
+  closeAgentModal();
+  await checkAgent();
+}
+
+// ── Views ─────────────────────────────────────────────────────────────────────
+
+function showView(name) {
+  ["search","results","seasons","episodes","movie"].forEach(v =>
+    document.getElementById("view-" + v).classList.toggle("hidden", v !== name)
+  );
+  document.getElementById("view-label").textContent = name;
+}
+
+function goBack(to) {
+  showView(to);
+  if (to === "search") selectedEps.clear();
+}
+
+// ── Search ────────────────────────────────────────────────────────────────────
+
+async function doSearch() {
+  const q = document.getElementById("search-input").value.trim();
+  if (!q) return;
+  const btn = document.getElementById("search-btn");
+  btn.disabled = true; btn.textContent = "…";
+  try {
+    currentResults = await api("/api/search?q=" + encodeURIComponent(q));
+    renderResults();
+    showView("results");
+  } catch(e) {
+    alert("Search failed: " + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = "Go";
+  }
+}
+
+function renderResults() {
+  const list = document.getElementById("results-list");
+  if (!currentResults.length) {
+    list.innerHTML = '<div class="empty">No results</div>'; return;
+  }
+  list.innerHTML = currentResults.map((r, i) => `
+    <div class="card" onclick="pickTitle(${i})">
+      <div class="card-body">
+        <div class="card-title">${r.Title}</div>
+        <div class="card-sub">${r.imdbID} · ${r.Year || "?"}</div>
+      </div>
+      <span class="tag ${r.Type === 'series' ? 'tag-series' : 'tag-movie'}">${r.Type}</span>
+    </div>
+  `).join("");
+}
+
+async function pickTitle(i) {
+  const r = currentResults[i];
+  currentDetail = r;
+
+  if (r.Type === "movie") {
+    showView("movie");
+    await loadMovieDetail(r.imdbID);
+  } else {
+    showView("seasons");
+    await loadSeasons(r.imdbID, r.Title);
+  }
+}
+
+// ── Movie ─────────────────────────────────────────────────────────────────────
+
+async function loadMovieDetail(imdbId) {
+  const el = document.getElementById("movie-detail");
+  el.innerHTML = '<div class="spinner" style="margin:20px auto"></div>';
+  try {
+    const d = await api("/api/detail?imdb=" + imdbId);
+    el.innerHTML = `
+      <div class="movie-detail">
+        <div class="movie-title">${d.Title} <span style="color:var(--muted);font-weight:300">(${d.Year})</span></div>
+        <div class="movie-meta">${[d.Genre, d.Runtime, d.imdbRating !== "N/A" ? "★ "+d.imdbRating : ""].filter(Boolean).join(" · ")}</div>
+        ${d.Plot && d.Plot !== "N/A" ? `<div class="movie-plot">${d.Plot}</div>` : ""}
+        <button class="btn-primary" style="margin-top:8px" onclick="downloadMovie('${d.imdbID}', '${d.Title.replace(/'/,"\\'")}')">
+          Download
+        </button>
+      </div>
+    `;
+  } catch(e) {
+    el.innerHTML = `<div class="empty">Failed to load details</div>`;
+  }
+}
+
+async function downloadMovie(imdbId, title) {
+  await startDownload({
+    type: "movie", imdb: imdbId, label: title,
+    season: 0, episode: 0
+  });
+}
+
+// ── Series / seasons ──────────────────────────────────────────────────────────
+
+async function loadSeasons(imdbId, title) {
+  document.getElementById("season-header").innerHTML =
+    `<p class="section-title">${title}</p>`;
+  const grid = document.getElementById("season-grid");
+  grid.innerHTML = '<div class="spinner" style="margin:12px 0"></div>';
+
+  try {
+    const d = await api("/api/detail?imdb=" + imdbId);
+    const n = parseInt(d.totalSeasons) || 1;
+    grid.innerHTML = Array.from({length: n}, (_, i) => i + 1).map(s => `
+      <button class="season-btn" onclick="pickSeason(${s})">${s}</button>
+    `).join("");
+  } catch(e) {
+    grid.innerHTML = `<div class="empty">Failed</div>`;
+  }
+}
+
+async function pickSeason(s) {
+  currentSeason = s;
+  selectedEps.clear();
+  document.querySelectorAll(".season-btn").forEach(b =>
+    b.classList.toggle("selected", parseInt(b.textContent) === s)
+  );
+  showView("episodes");
+  await loadEpisodes(currentDetail.imdbID, s);
+}
+
+async function loadEpisodes(imdbId, season) {
+  const hdr  = document.getElementById("ep-header");
+  const list = document.getElementById("ep-list");
+  hdr.innerHTML = `<p class="section-title">${currentDetail.Title} — Season ${season}</p>`;
+  list.innerHTML = '<div class="spinner" style="margin:12px 0"></div>';
+  document.getElementById("sel-bar").classList.add("hidden");
+
+  try {
+    currentEpisodes = await api(`/api/season?imdb=${imdbId}&s=${season}`);
+    renderEpisodes();
+  } catch(e) {
+    list.innerHTML = `<div class="empty">Failed to load episodes</div>`;
+  }
+}
+
+function renderEpisodes() {
+  const list = document.getElementById("ep-list");
+  if (!currentEpisodes.length) {
+    list.innerHTML = '<div class="empty">No episodes found</div>'; return;
+  }
+  list.innerHTML = currentEpisodes.map((ep, i) => `
+    <div class="ep-row ${selectedEps.has(i) ? 'selected' : ''}" onclick="toggleEp(${i})">
+      <span class="ep-num">E${String(ep.Episode).padStart(2,"0")}</span>
+      <span class="ep-title">${ep.Title}</span>
+      <span class="ep-rating">${ep.imdbRating !== "N/A" ? "★ "+ep.imdbRating : ""}</span>
+    </div>
+  `).join("");
+  updateSelBar();
+}
+
+function toggleEp(i) {
+  if (selectedEps.has(i)) selectedEps.delete(i);
+  else selectedEps.add(i);
+  renderEpisodes();
+}
+
+function clearSelection() {
+  selectedEps.clear();
+  renderEpisodes();
+}
+
+function updateSelBar() {
+  const bar = document.getElementById("sel-bar");
+  const lbl = document.getElementById("sel-label");
+  const n   = selectedEps.size;
+  bar.classList.toggle("hidden", n === 0);
+  lbl.textContent = n === 1 ? "1 episode" : `${n} episodes`;
+}
+
+// ── Download ──────────────────────────────────────────────────────────────────
+
+async function downloadSelected() {
+  if (!selectedEps.size) return;
+  const eps = [...selectedEps].sort((a, b) => a - b).map(i => currentEpisodes[i]);
+  for (const ep of eps) {
+    await startDownload({
+      type:    "tv",
+      imdb:    currentDetail.imdbID,
+      season:  currentSeason,
+      episode: parseInt(ep.Episode),
+      label:   `${currentDetail.Title} S${String(currentSeason).padStart(2,"0")}E${String(ep.Episode).padStart(2,"0")}`,
+    });
+  }
+  clearSelection();
+  switchTabDirect("jobs");
+}
+
+async function startDownload(payload) {
+  // Get M3U8 from VPS server
+  let m3u8Data;
+  try {
+    const path = payload.type === "tv"
+      ? `/api/m3u8/tv?imdb=${payload.imdb}&season=${payload.season}&episode=${payload.episode}`
+      : `/api/m3u8/movie?imdb=${payload.imdb}`;
+    m3u8Data = await api(path);
+  } catch(e) {
+    alert("Could not get stream for: " + payload.label + "\n" + e.message);
+    return;
+  }
+
+  // Send to phone agent
+  try {
+    const result = await agentPost("/download", { ...payload, ...m3u8Data });
+    trackJob(result.job_id, payload.label);
+  } catch(e) {
+    alert("Could not reach phone agent.\n" + e.message + "\n\nMake sure grab-agent is running in Termux.");
+  }
+}
+
+function switchTabDirect(tab) {
+  document.querySelectorAll(".tab").forEach((t, i) =>
+    t.classList.toggle("active", ["search","jobs"][i] === tab)
+  );
+  document.getElementById("tab-search").classList.toggle("hidden", tab !== "search");
+  document.getElementById("tab-jobs").classList.toggle("hidden",   tab !== "jobs");
+  if (tab === "jobs") renderJobs();
+}
+
+// ── Job tracking ──────────────────────────────────────────────────────────────
+
+function trackJob(jobId, label) {
+  const job = { id: jobId, label, status: "queued", progress: "Queued" };
+  localJobs.unshift(job);
+  saveJobs();
+  renderJobs();
+  pollJob(jobId);
+}
+
+function saveJobs() {
+  localStorage.setItem("jobs", JSON.stringify(localJobs.slice(0, 50)));
+}
+
+async function pollJob(jobId) {
+  if (!agentUrl) return;
+  try {
+    const j = await agentGet("/status/" + jobId);
+    const idx = localJobs.findIndex(x => x.id === jobId);
+    if (idx >= 0) {
+      localJobs[idx] = { ...localJobs[idx], ...j };
+      saveJobs();
+      renderJobs();
+    }
+    if (j.status !== "done" && j.status !== "failed") {
+      setTimeout(() => pollJob(jobId), 2000);
+    }
+  } catch {
+    setTimeout(() => pollJob(jobId), 4000);
+  }
+}
+
+function renderJobs() {
+  const list = document.getElementById("jobs-list");
+  if (!localJobs.length) {
+    list.innerHTML = '<div class="empty">No downloads yet</div>'; return;
+  }
+  list.innerHTML = localJobs.map(j => `
+    <div class="job-card">
+      <div class="job-header">
+        <span class="job-label">${j.label}</span>
+        <span class="job-status status-${j.status}">${j.status}</span>
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill ${j.status === 'downloading' ? 'indeterminate' : j.status === 'done' ? 'progress-fill' : ''}"
+             style="${j.status === 'done' ? 'width:100%' : ''}"></div>
+      </div>
+      <div class="job-progress">${j.progress || j.error || ""}</div>
+    </div>
+  `).join("");
+}
+
+function clearDoneJobs() {
+  localJobs = localJobs.filter(j => j.status !== "done" && j.status !== "failed");
+  saveJobs();
+  renderJobs();
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+
+checkAgent();
+setInterval(checkAgent, 10000);
+renderJobs();
+
+// Resume polling active jobs on page load
+localJobs.filter(j => j.status === "queued" || j.status === "downloading")
+         .forEach(j => pollJob(j.id));
+</script>
+</body>
+</html>
