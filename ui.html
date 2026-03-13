@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>grab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:      #0e0e0f;
+    --surface: #181819;
+    --border:  #2a2a2c;
+    --text:    #e8e8e6;
+    --muted:   #6b6b6e;
+    --accent:  #c8f065;
+    --danger:  #f06565;
+    --mono:    'DM Mono', monospace;
+    --sans:    'DM Sans', sans-serif;
+    --radius:  12px;
+  }
+
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 15px;
+    min-height: 100dvh;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  #app {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 24px 16px env(safe-area-inset-bottom, 24px);
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  header {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    padding-top: env(safe-area-inset-top, 0);
+  }
+  header h1 { font-family: var(--mono); font-size: 22px; font-weight: 500; letter-spacing: -0.5px; color: var(--accent); }
+  header span { font-size: 12px; color: var(--muted); font-family: var(--mono); }
+
+  #agent-status { display: flex; align-items: center; gap: 6px; font-size: 11px; font-family: var(--mono); color: var(--muted); margin-left: auto; }
+  #agent-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); transition: background 0.3s; }
+  #agent-dot.online  { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+  #agent-dot.offline { background: var(--danger); }
+
+  .search-wrap { display: flex; gap: 8px; }
+  input[type="text"] {
+    flex: 1; background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); color: var(--text); font-family: var(--sans);
+    font-size: 15px; padding: 12px 14px; outline: none; transition: border-color 0.2s;
+  }
+  input[type="text"]:focus { border-color: var(--accent); }
+  input[type="text"]::placeholder { color: var(--muted); }
+
+  button {
+    cursor: pointer; border: none; font-family: var(--sans); font-size: 14px;
+    font-weight: 500; border-radius: var(--radius); transition: opacity 0.15s, transform 0.1s;
+  }
+  button:active { transform: scale(0.97); }
+  button:disabled { opacity: 0.4; cursor: default; }
+
+  .btn-primary { background: var(--accent); color: #0e0e0f; padding: 12px 18px; }
+  .btn-ghost   { background: var(--surface); color: var(--text); border: 1px solid var(--border); padding: 10px 14px; }
+  .btn-sm      { padding: 7px 12px; font-size: 13px; }
+
+  .section-title { font-size: 11px; font-family: var(--mono); color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 10px; }
+
+  .card-list { display: flex; flex-direction: column; gap: 6px; }
+
+  /* ── Result cards with poster ── */
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 10px 12px; cursor: pointer; transition: border-color 0.15s, background 0.15s;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .card:hover { border-color: #444; background: #1e1e1f; }
+  .card-poster {
+    width: 42px; height: 62px; border-radius: 6px; object-fit: cover;
+    background: var(--border); flex-shrink: 0; display: block;
+  }
+  .card-poster-placeholder {
+    width: 42px; height: 62px; border-radius: 6px; background: var(--border);
+    flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+    font-size: 18px; color: var(--muted);
+  }
+  .card-body { flex: 1; min-width: 0; }
+  .card-title { font-weight: 500; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card-sub   { font-size: 12px; color: var(--muted); margin-top: 2px; font-family: var(--mono); }
+
+  .tag { font-size: 10px; font-family: var(--mono); padding: 3px 7px; border-radius: 6px; white-space: nowrap; flex-shrink: 0; }
+  .tag-series { background: #1a2a1a; color: var(--accent); }
+  .tag-movie  { background: #1a1a2a; color: #a0a0f0; }
+
+  /* ── Hero banner (movie / show detail) ── */
+  .hero-banner {
+    position: relative; border-radius: var(--radius); overflow: hidden;
+    aspect-ratio: 16/9; background: var(--surface); border: 1px solid var(--border);
+  }
+  .hero-banner img {
+    width: 100%; height: 100%; object-fit: cover; display: block;
+    filter: brightness(0.55);
+  }
+  .hero-banner-overlay {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    justify-content: flex-end; padding: 14px;
+    background: linear-gradient(to top, rgba(0,0,0,0.85) 0%, transparent 60%);
+  }
+  .hero-title { font-size: 20px; font-weight: 500; line-height: 1.2; }
+  .hero-meta  { font-size: 11px; font-family: var(--mono); color: #bbb; margin-top: 4px; }
+
+  /* ── Movie detail card ── */
+  .movie-detail {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    overflow: hidden; display: flex; flex-direction: column;
+  }
+  .movie-detail-body { padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+  .movie-title { font-size: 18px; font-weight: 500; }
+  .movie-meta  { font-size: 12px; color: var(--muted); font-family: var(--mono); }
+  .movie-plot  { font-size: 13px; color: #aaa; line-height: 1.55; }
+
+  /* ── Season grid ── */
+  .season-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 8px; }
+  .season-btn {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    color: var(--text); padding: 12px 8px; font-size: 13px; text-align: center; font-family: var(--mono);
+  }
+  .season-btn:hover { border-color: #555; }
+  .season-btn.selected { border-color: var(--accent); color: var(--accent); }
+
+  /* ── Episode rows with still preview ── */
+  .ep-list { display: flex; flex-direction: column; gap: 6px; }
+  .ep-row {
+    display: flex; align-items: center; gap: 10px; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
+    cursor: pointer; transition: border-color 0.15s;
+  }
+  .ep-row:hover { border-color: #555; }
+  .ep-row.selected { border-color: var(--accent); background: #0f1a00; }
+
+  /* still image on the left */
+  .ep-still-wrap {
+    position: relative; width: 96px; height: 54px; flex-shrink: 0;
+    background: var(--border); overflow: hidden;
+  }
+  .ep-still {
+    width: 100%; height: 100%; object-fit: cover; display: block;
+    transition: transform 0.25s ease;
+  }
+  .ep-row:hover .ep-still { transform: scale(1.05); }
+  .ep-still-placeholder {
+    width: 100%; height: 100%; display: flex; align-items: center;
+    justify-content: center; color: var(--muted); font-size: 20px;
+  }
+  /* YouTube-style play overlay on hover */
+  .ep-play-overlay {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.45); opacity: 0; transition: opacity 0.2s;
+    pointer-events: none;
+  }
+  .ep-row:hover .ep-play-overlay { opacity: 1; }
+  .ep-play-icon {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: rgba(200,240,101,0.9); display: flex; align-items: center; justify-content: center;
+  }
+  .ep-play-icon svg { width: 12px; height: 12px; fill: #0e0e0f; margin-left: 2px; }
+
+  /* ep text content */
+  .ep-content { flex: 1; min-width: 0; padding: 8px 10px 8px 0; }
+  .ep-top { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
+  .ep-num    { font-family: var(--mono); font-size: 11px; color: var(--accent); flex-shrink: 0; }
+  .ep-title  { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ep-bottom { display: flex; align-items: center; gap: 6px; }
+  .ep-date   { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  .ep-rating { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  .ep-overview { font-size: 11px; color: var(--muted); margin-top: 3px; line-height: 1.4;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+  /* selection checkbox overlay */
+  .ep-check {
+    width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--border);
+    flex-shrink: 0; margin-right: 10px; display: flex; align-items: center; justify-content: center;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .ep-row.selected .ep-check { border-color: var(--accent); background: var(--accent); }
+  .ep-check svg { display: none; width: 10px; height: 10px; }
+  .ep-row.selected .ep-check svg { display: block; }
+
+  .selection-bar {
+    position: sticky; bottom: 16px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 12px 14px; display: flex; align-items: center; gap: 10px;
+    backdrop-filter: blur(8px); box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  }
+  .selection-label { flex: 1; font-size: 13px; color: var(--muted); font-family: var(--mono); }
+
+  .back-btn { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); background: none; padding: 6px 0; font-family: var(--mono); }
+  .back-btn:hover { color: var(--text); }
+
+  /* ── Jobs ── */
+  .job-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 12px 14px; display: flex; flex-direction: column; gap: 8px;
+  }
+  .job-header { display: flex; align-items: center; gap: 8px; }
+  .job-label  { flex: 1; font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .job-status { font-size: 10px; font-family: var(--mono); padding: 3px 8px; border-radius: 6px; flex-shrink: 0; }
+  .status-queued      { background: #222;    color: var(--muted); }
+  .status-extracting  { background: #1a2a2a; color: #65d4f0; }
+  .status-downloading { background: #1a2a1a; color: var(--accent); }
+  .status-done        { background: #1a2a1a; color: var(--accent); }
+  .status-failed      { background: #2a1a1a; color: var(--danger); }
+  .job-progress { font-size: 12px; color: var(--muted); font-family: var(--mono); }
+
+  .progress-track { height: 2px; background: var(--border); border-radius: 2px; overflow: hidden; }
+  .progress-fill  { height: 100%; background: var(--accent); border-radius: 2px; width: 0%; transition: width 0.4s ease; }
+  .progress-fill.pulse { width: 100%; animation: pulse-bar 1.8s ease-in-out infinite; }
+  @keyframes pulse-bar { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
+
+  /* ── Tabs ── */
+  .tabs { display: flex; gap: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 3px; }
+  .tab  { flex: 1; text-align: center; padding: 8px; border-radius: 8px; font-size: 13px; color: var(--muted); cursor: pointer; transition: background 0.15s, color 0.15s; font-family: var(--mono); background: none; border: none; }
+  .tab.active { background: var(--bg); color: var(--text); }
+
+  .spinner { width: 18px; height: 18px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .empty { text-align: center; color: var(--muted); font-size: 13px; padding: 32px 0; font-family: var(--mono); }
+  .hidden { display: none !important; }
+
+  /* fade-in for images */
+  .fade-in { animation: fadeIn 0.3s ease; }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <header>
+    <h1>grab</h1>
+    <span id="view-label">search</span>
+    <div id="agent-status">
+      <div id="agent-dot"></div>
+      <span id="agent-text">checking…</span>
+    </div>
+  </header>
+
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('search')">Search</button>
+    <button class="tab" onclick="switchTab('jobs')">Downloads</button>
+  </div>
+
+  <!-- ── Search tab ── -->
+  <div id="tab-search">
+
+    <div id="view-search">
+      <div class="search-wrap">
+        <input type="text" id="search-input" placeholder="Search movies &amp; shows…"
+               onkeydown="if(event.key==='Enter') doSearch()">
+        <button class="btn-primary" onclick="doSearch()" id="search-btn">Go</button>
+      </div>
+    </div>
+
+    <div id="view-results" class="hidden">
+      <button class="back-btn" onclick="goBack('search')">← back</button>
+      <p class="section-title" style="margin-top:12px">Results</p>
+      <div id="results-list" class="card-list"></div>
+    </div>
+
+    <div id="view-seasons" class="hidden">
+      <button class="back-btn" onclick="goBack('results')">← back</button>
+      <div id="season-hero" style="margin-top:12px"></div>
+      <div id="season-header" style="margin-top:12px"></div>
+      <div id="season-grid" class="season-grid" style="margin-top:10px"></div>
+    </div>
+
+    <div id="view-episodes" class="hidden">
+      <button class="back-btn" onclick="goBack('seasons')">← back</button>
+      <div id="ep-header" style="margin-top:12px"></div>
+      <div id="ep-list" class="ep-list" style="margin-top:10px"></div>
+      <div class="selection-bar hidden" id="sel-bar">
+        <span class="selection-label" id="sel-label">0 selected</span>
+        <button class="btn-ghost btn-sm" onclick="clearSelection()">Clear</button>
+        <button class="btn-primary btn-sm" onclick="downloadSelected()">Download</button>
+      </div>
+    </div>
+
+    <div id="view-movie" class="hidden">
+      <button class="back-btn" onclick="goBack('results')">← back</button>
+      <div id="movie-detail" style="margin-top:12px"></div>
+    </div>
+
+  </div>
+
+  <!-- ── Downloads tab ── -->
+  <div id="tab-jobs" class="hidden">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <p class="section-title" style="margin:0">Downloads</p>
+      <button class="btn-ghost btn-sm" onclick="clearDoneJobs()">Clear done</button>
+    </div>
+    <div id="jobs-list" class="card-list">
+      <div class="empty">No downloads yet</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── Config ────────────────────────────────────────────────────────────────────
+const SERVER_URL  = window.location.origin;
+const API_KEY     = localStorage.getItem("api_key") || prompt("Enter API key:") || "";
+if (API_KEY) localStorage.setItem("api_key", API_KEY);
+
+// TMDB image base URLs
+const TMDB_POSTER_SM  = "https://image.tmdb.org/t/p/w92";
+const TMDB_POSTER_MD  = "https://image.tmdb.org/t/p/w342";
+const TMDB_BACKDROP   = "https://image.tmdb.org/t/p/w780";
+const TMDB_STILL      = "https://image.tmdb.org/t/p/w300";  // episode stills
+const TMDB_KEY        = localStorage.getItem("tmdb_key") || "";
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let currentResults  = [];
+let currentDetail   = null;
+let currentEpisodes = [];
+let currentSeason   = null;
+let selectedEps     = new Set();
+let jobs            = {};
+// Cache episode stills: key = "tmdbId_S_E", value = still_path or null
+let stillCache      = {};
+
+// ── Health ────────────────────────────────────────────────────────────────────
+async function checkServer() {
+  const dot  = document.getElementById("agent-dot");
+  const text = document.getElementById("agent-text");
+  try {
+    const r = await fetch(SERVER_URL + "/health", { signal: AbortSignal.timeout(4000) });
+    dot.className    = r.ok ? "online"  : "offline";
+    text.textContent = r.ok ? "online"  : "offline";
+  } catch {
+    dot.className    = "offline";
+    text.textContent = "offline";
+  }
+}
+
+// ── Tabs ──────────────────────────────────────────────────────────────────────
+function switchTab(tab) {
+  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+  event.target.classList.add("active");
+  document.getElementById("tab-search").classList.toggle("hidden", tab !== "search");
+  document.getElementById("tab-jobs").classList.toggle("hidden",   tab !== "jobs");
+  if (tab === "jobs") renderJobs();
+}
+
+function switchTabDirect(tab) {
+  document.querySelectorAll(".tab").forEach((t, i) =>
+    t.classList.toggle("active", ["search","jobs"][i] === tab)
+  );
+  document.getElementById("tab-search").classList.toggle("hidden", tab !== "search");
+  document.getElementById("tab-jobs").classList.toggle("hidden",   tab !== "jobs");
+  if (tab === "jobs") renderJobs();
+}
+
+// ── API helper ────────────────────────────────────────────────────────────────
+async function api(path) {
+  const r = await fetch(SERVER_URL + path, { headers: { "x-api-key": API_KEY } });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+// Fetch episode stills directly from TMDB (no auth needed for images, but need key for API)
+async function fetchEpisodeStill(tmdbId, season, episode) {
+  const cacheKey = `${tmdbId}_${season}_${episode}`;
+  if (cacheKey in stillCache) return stillCache[cacheKey];
+
+  // We get stills via our own /api/season which already returns episode data,
+  // but episode stills need a separate TMDB call. We'll do it client-side if TMDB_KEY is stored,
+  // or fall back to null (placeholder).
+  // Actually we can piggyback on the episode data returned — TMDB /season/{s} includes still_path.
+  // We already store currentEpisodes from /api/season. We just need still_path added server-side.
+  // For now, attempt via TMDB directly if key available.
+  const key = localStorage.getItem("tmdb_key");
+  if (!key) { stillCache[cacheKey] = null; return null; }
+
+  try {
+    const url = `https://api.themoviedb.org/3/tv/${tmdbId}/season/${season}/episode/${episode}/images?api_key=${key}`;
+    const r = await fetch(url);
+    if (!r.ok) throw new Error();
+    const data = await r.json();
+    const still = data.stills?.[0]?.file_path || null;
+    stillCache[cacheKey] = still;
+    return still;
+  } catch {
+    stillCache[cacheKey] = null;
+    return null;
+  }
+}
+
+// ── Views ─────────────────────────────────────────────────────────────────────
+function showView(name) {
+  ["search","results","seasons","episodes","movie"].forEach(v =>
+    document.getElementById("view-" + v).classList.toggle("hidden", v !== name)
+  );
+  document.getElementById("view-label").textContent = name;
+}
+
+function goBack(to) {
+  showView(to);
+  if (to === "search") selectedEps.clear();
+}
+
+// ── Search ────────────────────────────────────────────────────────────────────
+async function doSearch() {
+  const q = document.getElementById("search-input").value.trim();
+  if (!q) return;
+  const btn = document.getElementById("search-btn");
+  btn.disabled = true; btn.textContent = "…";
+  try {
+    currentResults = await api("/api/search?q=" + encodeURIComponent(q));
+    renderResults();
+    showView("results");
+  } catch(e) {
+    alert("Search failed: " + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = "Go";
+  }
+}
+
+function renderResults() {
+  const list = document.getElementById("results-list");
+  if (!currentResults.length) {
+    list.innerHTML = '<div class="empty">No results</div>';
+    return;
+  }
+  list.innerHTML = currentResults.map((r, i) => {
+    const posterHtml = r.poster
+      ? `<img class="card-poster" src="${r.poster}" alt="" loading="lazy" onerror="this.style.display='none'">`
+      : `<div class="card-poster-placeholder">🎬</div>`;
+    return `
+      <div class="card" onclick="pickTitle(${i})">
+        ${posterHtml}
+        <div class="card-body">
+          <div class="card-title">${r.title}</div>
+          <div class="card-sub">${r.year || "?"} · ★ ${r.rating || "?"}</div>
+        </div>
+        <span class="tag ${r.type === 'tv' ? 'tag-series' : 'tag-movie'}">${r.type}</span>
+      </div>
+    `;
+  }).join("");
+}
+
+async function pickTitle(i) {
+  const r = currentResults[i];
+  currentDetail = r;
+
+  if (r.type === "movie") {
+    showView("movie");
+    await loadMovieDetail(r.tmdb_id);
+  } else {
+    showView("seasons");
+    await loadSeasons(r.tmdb_id, r.title, r.poster);
+  }
+}
+
+// ── Movie ─────────────────────────────────────────────────────────────────────
+async function loadMovieDetail(tmdbId) {
+  const el = document.getElementById("movie-detail");
+  el.innerHTML = '<div class="spinner" style="margin:20px auto"></div>';
+  try {
+    const d = await api(`/api/detail?tmdb_id=${tmdbId}&type=movie`);
+    currentDetail = d;
+    const safeTitle = d.title.replace(/'/g, "\\'");
+
+    // Backdrop image — use w780 version (bigger than poster)
+    const backdropSrc = d.poster
+      ? d.poster.replace("/w92/", "/w780/").replace("/w342/", "/w780/")
+      : "";
+
+    const heroHtml = backdropSrc ? `
+      <div class="hero-banner" style="margin-bottom:12px">
+        <img src="${backdropSrc}" alt="${d.title}" class="fade-in">
+        <div class="hero-banner-overlay">
+          <div class="hero-title">${d.title} <span style="opacity:0.6;font-weight:300">(${d.year})</span></div>
+          <div class="hero-meta">${[d.genres, d.runtime ? d.runtime + " min" : "", d.rating ? "★ " + d.rating : ""].filter(Boolean).join(" · ")}</div>
+        </div>
+      </div>` : "";
+
+    el.innerHTML = `
+      ${heroHtml}
+      <div class="movie-detail">
+        <div class="movie-detail-body">
+          ${!backdropSrc ? `<div class="movie-title">${d.title} <span style="color:var(--muted);font-weight:300">(${d.year})</span></div>` : ""}
+          ${!backdropSrc ? `<div class="movie-meta">${[d.genres, d.runtime ? d.runtime + " min" : "", d.rating ? "★ " + d.rating : ""].filter(Boolean).join(" · ")}</div>` : ""}
+          ${d.overview ? `<div class="movie-plot">${d.overview}</div>` : ""}
+          <button class="btn-primary" style="margin-top:4px"
+            onclick="queueDownload({type:'movie',imdb:'${d.imdb_id}',label:'${safeTitle}',season:0,episode:0})">
+            Download
+          </button>
+        </div>
+      </div>
+    `;
+  } catch(e) {
+    el.innerHTML = '<div class="empty">Failed to load details</div>';
+  }
+}
+
+// ── Series ────────────────────────────────────────────────────────────────────
+async function loadSeasons(tmdbId, title, posterThumb) {
+  // Show hero with poster while loading detail
+  const heroEl = document.getElementById("season-hero");
+  const posterSrc = posterThumb ? posterThumb.replace("/w92/", "/w342/") : "";
+  heroEl.innerHTML = posterSrc ? `
+    <div class="hero-banner">
+      <img src="${posterSrc}" alt="${title}" class="fade-in" style="filter:brightness(0.45)">
+      <div class="hero-banner-overlay">
+        <div class="hero-title">${title}</div>
+      </div>
+    </div>` : "";
+
+  document.getElementById("season-header").innerHTML = `<p class="section-title">Select season</p>`;
+  const grid = document.getElementById("season-grid");
+  grid.innerHTML = '<div class="spinner" style="margin:12px 0"></div>';
+  try {
+    const d = await api(`/api/detail?tmdb_id=${tmdbId}&type=tv`);
+    currentDetail = d;
+
+    // Update hero with better backdrop if available
+    if (d.poster) {
+      const bigPoster = d.poster.replace("/w92/", "/w342/");
+      heroEl.innerHTML = `
+        <div class="hero-banner">
+          <img src="${bigPoster}" alt="${d.title}" class="fade-in" style="filter:brightness(0.45)">
+          <div class="hero-banner-overlay">
+            <div class="hero-title">${d.title}</div>
+            <div class="hero-meta">${[d.year, d.genres, d.rating ? "★ " + d.rating : ""].filter(Boolean).join(" · ")}</div>
+          </div>
+        </div>`;
+    }
+
+    const n = d.total_seasons || 1;
+    grid.innerHTML = Array.from({length: n}, (_, i) => i + 1).map(s =>
+      `<button class="season-btn" onclick="pickSeason(${s})">S${String(s).padStart(2,"0")}</button>`
+    ).join("");
+  } catch(e) {
+    grid.innerHTML = '<div class="empty">Failed</div>';
+  }
+}
+
+async function pickSeason(s) {
+  currentSeason = s;
+  selectedEps.clear();
+  document.querySelectorAll(".season-btn").forEach(b =>
+    b.classList.toggle("selected", parseInt(b.textContent.replace("S","")) === s)
+  );
+  showView("episodes");
+  await loadEpisodes(currentDetail.tmdb_id, s);
+}
+
+async function loadEpisodes(tmdbId, season) {
+  const hdr  = document.getElementById("ep-header");
+  const list = document.getElementById("ep-list");
+  hdr.innerHTML = `<p class="section-title">${currentDetail.title} — Season ${season}</p>`;
+  list.innerHTML = '<div class="spinner" style="margin:12px 0"></div>';
+  document.getElementById("sel-bar").classList.add("hidden");
+  try {
+    currentEpisodes = await api(`/api/season?tmdb_id=${tmdbId}&s=${season}`);
+    renderEpisodes();
+    // Lazily load stills in background
+    loadStillsInBackground(tmdbId, season);
+  } catch(e) {
+    list.innerHTML = '<div class="empty">Failed to load episodes</div>';
+  }
+}
+
+// Fetch stills for all episodes in background, update DOM as they come in
+async function loadStillsInBackground(tmdbId, season) {
+  for (let i = 0; i < currentEpisodes.length; i++) {
+    const ep = currentEpisodes[i];
+    const cacheKey = `${tmdbId}_${season}_${ep.episode}`;
+    if (stillCache[cacheKey] !== undefined) {
+      updateEpStill(i, stillCache[cacheKey]);
+      continue;
+    }
+    await new Promise(r => setTimeout(r, 80));
+    // Use server proxy — TMDB key stays on backend
+    const stillSrc = `${SERVER_URL}/api/still?tmdb_id=${tmdbId}&season=${season}&episode=${ep.episode}`;
+    stillCache[cacheKey] = stillSrc;
+    updateEpStill(i, stillSrc);
+  }
+}
+
+function updateEpStill(index, stillSrc) {
+  const wrap = document.getElementById(`ep-still-${index}`);
+  if (!wrap || !stillSrc) return;
+  wrap.innerHTML = `
+    <img class="ep-still fade-in" src="${stillSrc}"
+         alt="" loading="lazy"
+         onerror="this.parentElement.innerHTML='<div class=\'ep-still-placeholder\'>▶</div>'"
+         fetchpriority="low">
+    <div class="ep-play-overlay"><div class="ep-play-icon">
+      <svg viewBox="0 0 10 12"><polygon points="0,0 10,6 0,12"/></svg>
+    </div></div>
+  `;
+}
+
+function renderEpisodes() {
+  const list = document.getElementById("ep-list");
+  if (!currentEpisodes.length) {
+    list.innerHTML = '<div class="empty">No episodes found</div>';
+    return;
+  }
+  list.innerHTML = currentEpisodes.map((ep, i) => {
+    const cacheKey = `${currentDetail.tmdb_id}_${currentSeason}_${ep.episode}`;
+    const stillPath = stillCache[cacheKey];
+    const stillHtml = stillPath
+      ? `<img class="ep-still" src="${TMDB_STILL}${stillPath}" alt="" loading="lazy">
+         <div class="ep-play-overlay"><div class="ep-play-icon"><svg viewBox="0 0 10 12"><polygon points="0,0 10,6 0,12"/></svg></div></div>`
+      : `<div class="ep-still-placeholder">▶</div>`;
+
+    return `
+      <div class="ep-row ${selectedEps.has(i) ? 'selected' : ''}" onclick="toggleEp(${i})">
+        <div class="ep-still-wrap" id="ep-still-${i}">${stillHtml}</div>
+        <div class="ep-content">
+          <div class="ep-top">
+            <span class="ep-num">E${String(ep.episode).padStart(2,"0")}</span>
+            <span class="ep-title">${ep.title}</span>
+          </div>
+          ${ep.overview ? `<div class="ep-overview">${ep.overview}</div>` : ""}
+          <div class="ep-bottom">
+            ${ep.air_date ? `<span class="ep-date">${ep.air_date}</span>` : ""}
+            ${ep.rating   ? `<span class="ep-rating">★ ${ep.rating}</span>` : ""}
+          </div>
+        </div>
+        <div class="ep-check">
+          <svg viewBox="0 0 10 8" fill="none" stroke="#0e0e0f" stroke-width="2"><polyline points="1,4 3.5,7 9,1"/></svg>
+        </div>
+      </div>
+    `;
+  }).join("");
+  updateSelBar();
+}
+
+function toggleEp(i) {
+  if (selectedEps.has(i)) selectedEps.delete(i); else selectedEps.add(i);
+  const row = document.querySelectorAll(".ep-row")[i];
+  if (row) {
+    row.classList.toggle("selected", selectedEps.has(i));
+    const check = row.querySelector(".ep-check");
+    if (check) check.querySelector("svg").style.display = selectedEps.has(i) ? "block" : "none";
+  }
+  updateSelBar();
+}
+
+function clearSelection() { selectedEps.clear(); renderEpisodes(); }
+
+function updateSelBar() {
+  const n = selectedEps.size;
+  document.getElementById("sel-bar").classList.toggle("hidden", n === 0);
+  document.getElementById("sel-label").textContent = n === 1 ? "1 episode" : `${n} episodes`;
+}
+
+async function downloadSelected() {
+  if (!selectedEps.size) return;
+  const eps = [...selectedEps].sort((a, b) => a - b).map(i => currentEpisodes[i]);
+  for (const ep of eps) {
+    queueDownload({
+      type:    "tv",
+      imdb:    currentDetail.imdb_id,
+      season:  currentSeason,
+      episode: ep.episode,
+      label:   `${currentDetail.title} S${String(currentSeason).padStart(2,"0")}E${String(ep.episode).padStart(2,"0")}`,
+    });
+  }
+  clearSelection();
+  switchTabDirect("jobs");
+}
+
+// ── Download ──────────────────────────────────────────────────────────────────
+async function queueDownload(payload) {
+  const id   = "job_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6);
+  const stem = payload.label.replace(/[^a-z0-9]/gi, "_");
+
+  jobs[id] = { id, label: payload.label, status: "extracting", progress: "Extracting stream…", pct: 0 };
+  switchTabDirect("jobs");
+  renderJobs();
+
+  const set = (status, progress, pct) => {
+    jobs[id].status   = status;
+    jobs[id].progress = progress;
+    if (pct !== undefined) jobs[id].pct = pct;
+    renderJobs();
+  };
+
+  try {
+    if (!payload.imdb) throw new Error("No IMDB ID available for this title — cannot download");
+
+    const dlPath = payload.type === "tv"
+      ? `/api/download/tv?imdb=${payload.imdb}&season=${payload.season}&episode=${payload.episode}`
+      : `/api/download/movie?imdb=${payload.imdb}`;
+
+    const resp = await fetch(SERVER_URL + dlPath, { headers: { "x-api-key": API_KEY } });
+    if (!resp.ok) throw new Error(`Server error ${resp.status}: ${await resp.text()}`);
+
+    set("downloading", "Receiving stream…", 5);
+
+    const reader = resp.body.getReader();
+    const chunks = [];
+    let received = 0;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      received += value.byteLength;
+      set("downloading", `${(received / 1_048_576).toFixed(1)} MB received…`, 50);
+    }
+
+    const blob = new Blob(chunks, { type: "video/mp4" });
+    triggerSave(blob, stem + ".mp4");
+    set("done", `MP4 saved · ${(blob.size / 1_048_576).toFixed(1)} MB`, 100);
+
+    try {
+      const subPath = payload.type === "tv"
+        ? `/api/subtitle?imdb=${payload.imdb}&season=${payload.season}&episode=${payload.episode}`
+        : `/api/subtitle?imdb=${payload.imdb}`;
+      const sr = await fetch(SERVER_URL + subPath, { headers: { "x-api-key": API_KEY } });
+      if (sr.ok) {
+        triggerSave(await sr.blob(), stem + ".srt");
+        jobs[id].progress += " + SRT";
+        renderJobs();
+      }
+    } catch (_) {}
+
+  } catch(e) {
+    set("failed", e.message);
+  }
+}
+
+function triggerSave(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a   = Object.assign(document.createElement("a"), { href: url, download: filename });
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+// ── Jobs UI ───────────────────────────────────────────────────────────────────
+function renderJobs() {
+  const list   = document.getElementById("jobs-list");
+  const all    = Object.values(jobs).reverse();
+  if (!all.length) { list.innerHTML = '<div class="empty">No downloads yet</div>'; return; }
+  const active = s => ["extracting","downloading"].includes(s);
+  list.innerHTML = all.map(j => `
+    <div class="job-card">
+      <div class="job-header">
+        <span class="job-label">${j.label}</span>
+        <span class="job-status status-${j.status}">${j.status}</span>
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill ${active(j.status) ? 'pulse' : ''}"
+             style="width:${j.status === 'done' ? 100 : (j.pct || 0)}%"></div>
+      </div>
+      <div class="job-progress">${j.progress || ""}</div>
+    </div>
+  `).join("");
+}
+
+function clearDoneJobs() {
+  Object.keys(jobs).forEach(id => {
+    if (["done","failed"].includes(jobs[id].status)) delete jobs[id];
+  });
+  renderJobs();
+}
+
+// ── TMDB key prompt (for stills) ──────────────────────────────────────────────
+
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+checkServer();
+setInterval(checkServer, 15_000);
+renderJobs();
+</script>
+</body>
+</html>
