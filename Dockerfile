@@ -7,6 +7,7 @@ RUN apt-get update && apt-get install -y \
     libnspr4 libnss3 libx11-xcb1 libxcomposite1 \
     libxdamage1 libxfixes3 libxrandr2 libxss1 \
     libasound2 libpango-1.0-0 libpangocairo-1.0-0 \
+    tor \
     --no-install-recommends && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -20,4 +21,4 @@ COPY ui.html .
 
 EXPOSE ${PORT:-8000}
 
-CMD ["sh", "-c", "uvicorn server:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["sh", "-c", "tor --SocksPort 9050 --RunAsDaemon 1 && sleep 3 && uvicorn server:app --host 0.0.0.0 --port ${PORT:-8000}"]
