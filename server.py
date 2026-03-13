@@ -94,18 +94,17 @@ async def tmdb_get(path: str, **params) -> dict:
 @app.get("/api/search", dependencies=[Depends(verify)])
 async def search(q: str):
     data = await tmdb_get("/search/multi", query=q, include_adult=False)
-    out  = []
-    for r in data.get("results", [])[:10]:
+    results = [r for r in data.get("results", [])[:10] if r.get("media_type") in ("movie", "tv")]
+
+    async def enrich(r):
         mt = r.get("media_type")
-        if mt not in ("movie", "tv"):
-            continue
         imdb_id = None
         try:
-            ext     = await tmdb_get(f"/{mt}/{r['id']}/external_ids")
+            ext = await tmdb_get(f"/{mt}/{r['id']}/external_ids")
             imdb_id = ext.get("imdb_id")
         except Exception as e:
             log(f"external_ids error for {r['id']}: {e}")
-        out.append({
+        return {
             "tmdb_id": r.get("id"),
             "imdb_id": imdb_id,
             "title":   r.get("title") or r.get("name") or "",
@@ -113,10 +112,9 @@ async def search(q: str):
             "type":    mt,
             "rating":  round(r.get("vote_average", 0), 1),
             "poster":  TMDB_IMG + r["poster_path"] if r.get("poster_path") else "",
-        })
-    return out
+        }
 
-
+    return await asyncio.gather(*[enrich(r) for r in results])
 # ── Detail ────────────────────────────────────────────────────────────────────
 
 @app.get("/api/detail", dependencies=[Depends(verify)])
