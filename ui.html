@@ -573,8 +573,7 @@ async function loadEpisodes(tmdbId, season) {
   try {
     currentEpisodes = await api(`/api/season?tmdb_id=${tmdbId}&s=${season}`);
     renderEpisodes();
-    // Lazily load stills in background
-    loadStillsInBackground(tmdbId, season);
+    
   } catch(e) {
     list.innerHTML = '<div class="empty">Failed to load episodes</div>';
   }
@@ -617,34 +616,24 @@ function renderEpisodes() {
     list.innerHTML = '<div class="empty">No episodes found</div>';
     return;
   }
-  list.innerHTML = currentEpisodes.map((ep, i) => {
-    const cacheKey = `${currentDetail.tmdb_id}_${currentSeason}_${ep.episode}`;
-    const stillPath = stillCache[cacheKey];
-    const stillHtml = stillPath
-      ? `<img class="ep-still" src="${TMDB_STILL}${stillPath}" alt="" loading="lazy">
-         <div class="ep-play-overlay"><div class="ep-play-icon"><svg viewBox="0 0 10 12"><polygon points="0,0 10,6 0,12"/></svg></div></div>`
-      : `<div class="ep-still-placeholder">▶</div>`;
-
-    return `
-      <div class="ep-row ${selectedEps.has(i) ? 'selected' : ''}" onclick="toggleEp(${i})">
-        <div class="ep-still-wrap" id="ep-still-${i}">${stillHtml}</div>
-        <div class="ep-content">
-          <div class="ep-top">
-            <span class="ep-num">E${String(ep.episode).padStart(2,"0")}</span>
-            <span class="ep-title">${ep.title}</span>
-          </div>
-          ${ep.overview ? `<div class="ep-overview">${ep.overview}</div>` : ""}
-          <div class="ep-bottom">
-            ${ep.air_date ? `<span class="ep-date">${ep.air_date}</span>` : ""}
-            ${ep.rating   ? `<span class="ep-rating">★ ${ep.rating}</span>` : ""}
-          </div>
+  list.innerHTML = currentEpisodes.map((ep, i) => `
+    <div class="ep-row ${selectedEps.has(i) ? 'selected' : ''}" onclick="toggleEp(${i})">
+      <div class="ep-content">
+        <div class="ep-top">
+          <span class="ep-num">E${String(ep.episode).padStart(2,"0")}</span>
+          <span class="ep-title">${ep.title}</span>
         </div>
-        <div class="ep-check">
-          <svg viewBox="0 0 10 8" fill="none" stroke="#0e0e0f" stroke-width="2"><polyline points="1,4 3.5,7 9,1"/></svg>
+        ${ep.overview ? `<div class="ep-overview">${ep.overview}</div>` : ""}
+        <div class="ep-bottom">
+          ${ep.air_date ? `<span class="ep-date">${ep.air_date}</span>` : ""}
+          ${ep.rating   ? `<span class="ep-rating">★ ${ep.rating}</span>` : ""}
         </div>
       </div>
-    `;
-  }).join("");
+      <div class="ep-check">
+        <svg viewBox="0 0 10 8" fill="none" stroke="#0e0e0f" stroke-width="2"><polyline points="1,4 3.5,7 9,1"/></svg>
+      </div>
+    </div>
+  `).join("");
   updateSelBar();
 }
 
