@@ -317,8 +317,7 @@
 <script>
 // ── Config ────────────────────────────────────────────────────────────────────
 const SERVER_URL  = window.location.origin;
-const API_KEY     = localStorage.getItem("api_key") || prompt("Enter API key:") || "";
-if (API_KEY) localStorage.setItem("api_key", API_KEY);
+const API_KEY = "desmos";
 
 // TMDB image base URLs
 const TMDB_POSTER_SM  = "https://image.tmdb.org/t/p/w92";
