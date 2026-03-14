@@ -93,28 +93,26 @@ async def tmdb_get(path: str, **params) -> dict:
 
 @app.get("/api/search", dependencies=[Depends(verify)])
 async def search(q: str):
-    data = await tmdb_get("/search/multi", query=q, include_adult=False)
-    results = [r for r in data.get("results", [])[:10] if r.get("media_type") in ("movie", "tv")]
+    async with httpx.AsyncClient(timeout=10) as client:
+        params = {"api_key": TMDB_KEY, "query": q, "include_adult": False}
+        url = TMDB_BASE + "/search/multi?" + urllib.parse.urlencode(params)
+        r = await client.get(url)
+        r.raise_for_status()
+        data = r.json()
 
-    async def enrich(r):
-        mt = r.get("media_type")
-        imdb_id = None
-        try:
-            ext = await tmdb_get(f"/{mt}/{r['id']}/external_ids")
-            imdb_id = ext.get("imdb_id")
-        except Exception as e:
-            log(f"external_ids error for {r['id']}: {e}")
-        return {
-            "tmdb_id": r.get("id"),
-            "imdb_id": imdb_id,
-            "title":   r.get("title") or r.get("name") or "",
+    return [
+        {
+            "tmdb_id": r["id"],
+            "imdb_id": None,
+            "title":   r.get("title") or r.get("name", ""),
             "year":    (r.get("release_date") or r.get("first_air_date") or "")[:4],
-            "type":    mt,
+            "type":    r["media_type"],
             "rating":  round(r.get("vote_average", 0), 1),
             "poster":  TMDB_IMG + r["poster_path"] if r.get("poster_path") else "",
         }
-
-    return await asyncio.gather(*[enrich(r) for r in results])
+        for r in data.get("results", [])[:10]
+        if r.get("media_type") in ("movie", "tv")
+    ]
 # ── Detail ────────────────────────────────────────────────────────────────────
 
 @app.get("/api/detail", dependencies=[Depends(verify)])
