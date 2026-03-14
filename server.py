@@ -93,13 +93,7 @@ async def tmdb_get(path: str, **params) -> dict:
 
 @app.get("/api/search", dependencies=[Depends(verify)])
 async def search(q: str):
-    async with httpx.AsyncClient(timeout=10) as client:
-        params = {"api_key": TMDB_KEY, "query": q, "include_adult": False}
-        url = TMDB_BASE + "/search/multi?" + urllib.parse.urlencode(params)
-        r = await client.get(url)
-        r.raise_for_status()
-        data = r.json()
-
+    data = await tmdb_get("/search/multi", query=q, include_adult=False)
     return [
         {
             "tmdb_id": r["id"],
