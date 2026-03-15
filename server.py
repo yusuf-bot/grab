@@ -228,7 +228,7 @@ from fastapi.responses import FileResponse
 
 @app.get("/favicon.ico")
 async def favicon():
-    return FileResponse("logo.png", media_type="image/png")
+    return FileResponse("assets/logo.png", media_type="image/png")
 
 # ── Detail ────────────────────────────────────────────────────────────────────
 
