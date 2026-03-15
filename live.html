@@ -4,9 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>grab · live</title>
+<link rel="icon" type="image/png" href="/favicon.ico">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7/dist/hls.min.js"></script>
+<script type="module" src="https://cdn.jsdelivr.net/npm/@videojs/html/cdn/video-minimal.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@videojs/html/cdn/video-minimal.css">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -27,28 +30,25 @@
     background: var(--bg);
     color: var(--text);
     font-family: var(--sans);
-    font-size: 15px;
     min-height: 100dvh;
     -webkit-font-smoothing: antialiased;
-    overflow: hidden;
   }
 
-  /* ── Layout ── */
   #app {
     display: flex;
     flex-direction: column;
-    height: 100dvh;
-    padding: env(safe-area-inset-top, 0) 0 env(safe-area-inset-bottom, 0) 0;
+    min-height: 100dvh;
+    padding-top: env(safe-area-inset-top, 0);
+    padding-bottom: env(safe-area-inset-bottom, 0);
   }
 
-  /* ── Header ── */
+  /* ── Top bar ── */
   #top-bar {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 14px 16px 10px;
+    gap: 10px;
+    padding: 14px 16px 12px;
     flex-shrink: 0;
-    background: var(--bg);
   }
   #back-btn {
     font-family: var(--mono);
@@ -58,30 +58,33 @@
     border: none;
     cursor: pointer;
     padding: 0;
-    display: flex;
-    align-items: center;
-    gap: 5px;
   }
   #back-btn:hover { color: var(--text); }
+
   #channel-name {
     font-family: var(--mono);
     font-size: 13px;
     color: var(--text);
     flex: 1;
   }
+
   #live-badge {
     font-family: var(--mono);
     font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.06em;
     padding: 3px 8px;
     border-radius: 6px;
     background: var(--danger);
     color: #fff;
-    letter-spacing: 0.05em;
+    flex-shrink: 0;
   }
-  #live-badge.buffering {
-    background: #333;
+  #live-badge.loading {
+    background: var(--surface);
     color: var(--muted);
+    border: 1px solid var(--border);
   }
+
   #refresh-btn {
     font-family: var(--mono);
     font-size: 12px;
@@ -91,101 +94,94 @@
     border-radius: 8px;
     padding: 5px 10px;
     cursor: pointer;
+    flex-shrink: 0;
   }
   #refresh-btn:hover { color: var(--text); border-color: #444; }
   #refresh-btn:active { transform: scale(0.96); }
 
-  /* ── Video container ── */
-  #video-wrap {
+  /* ── Player wrap ── */
+  #player-wrap {
     flex: 1;
+    padding: 0 16px 16px;
     display: flex;
-    align-items: center;
-    justify-content: center;
-    background: #000;
-    position: relative;
-    overflow: hidden;
+    flex-direction: column;
+    gap: 0;
   }
 
-  video {
+  video-player {
+    display: block;
+    width: 100%;
+    border-radius: 14px;
+    overflow: hidden;
+    background: #000;
+    aspect-ratio: 16/9;
+    position: relative;
+  }
+
+  video-minimal-skin {
+    --media-border-radius: 14px;
+    display: block;
     width: 100%;
     height: 100%;
-    object-fit: contain;
-    display: block;
-    background: #000;
   }
 
-  /* ── Status overlay ── */
-  #status-overlay {
+  /* Hide seek buttons and time/progress bar — not useful for live */
+  media-seek-button,
+  .media-time-controls,
+  media-playback-rate-button { display: none !important; }
+
+  /* Accent color for controls */
+  video-minimal-skin {
+    color: var(--accent);
+  }
+
+  /* ── Loading / error overlay ── */
+  #overlay {
     position: absolute;
     inset: 0;
+    border-radius: 14px;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 14px;
-    background: rgba(0,0,0,0.75);
-    backdrop-filter: blur(4px);
+    gap: 12px;
+    background: rgba(0,0,0,0.8);
+    backdrop-filter: blur(6px);
+    z-index: 20;
   }
-  #status-overlay.hidden { display: none; }
+  #overlay.hidden { display: none; }
 
-  .status-spinner {
-    width: 32px; height: 32px;
-    border: 3px solid var(--border);
+  .overlay-spinner {
+    width: 30px; height: 30px;
+    border: 2.5px solid rgba(255,255,255,0.15);
     border-top-color: var(--accent);
     border-radius: 50%;
-    animation: spin 0.7s linear infinite;
+    animation: spin 0.75s linear infinite;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  #status-text {
+  #overlay-text {
     font-family: var(--mono);
-    font-size: 13px;
+    font-size: 12px;
     color: var(--muted);
     text-align: center;
-    max-width: 240px;
-    line-height: 1.5;
+    max-width: 220px;
+    line-height: 1.6;
   }
 
-  #retry-btn {
+  #overlay-retry {
     font-family: var(--mono);
     font-size: 13px;
     background: var(--accent);
     color: #0e0e0f;
     border: none;
     border-radius: var(--radius);
-    padding: 10px 20px;
+    padding: 9px 20px;
     cursor: pointer;
     display: none;
   }
-  #retry-btn.visible { display: block; }
-  #retry-btn:active { transform: scale(0.97); }
-
-  /* ── Bottom bar ── */
-  #bottom-bar {
-    flex-shrink: 0;
-    padding: 10px 16px 14px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    background: var(--bg);
-  }
-  #quality-label {
-    font-family: var(--mono);
-    font-size: 11px;
-    color: var(--muted);
-    margin-left: auto;
-  }
-  #fullscreen-btn {
-    font-family: var(--mono);
-    font-size: 12px;
-    color: var(--muted);
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 5px 10px;
-    cursor: pointer;
-  }
-  #fullscreen-btn:hover { color: var(--text); border-color: #444; }
+  #overlay-retry.show { display: block; }
+  #overlay-retry:active { transform: scale(0.97); }
 </style>
 </head>
 <body>
@@ -194,147 +190,112 @@
   <div id="top-bar">
     <button id="back-btn" onclick="window.location='/'">← back</button>
     <span id="channel-name">Sky Sports</span>
-    <span id="live-badge" class="buffering">LOADING</span>
-    <button id="refresh-btn" onclick="startStream()">↺ refresh</button>
+    <span id="live-badge" class="loading">LOADING</span>
+    <button id="refresh-btn" onclick="reload()">↺ refresh</button>
   </div>
 
-  <div id="video-wrap">
-    <video id="player" playsinline autoplay muted></video>
-    <div id="status-overlay">
-      <div class="status-spinner"></div>
-      <div id="status-text">Loading stream…</div>
-      <button id="retry-btn" onclick="startStream()">Retry</button>
-    </div>
-  </div>
-
-  <div id="bottom-bar">
-    <span id="quality-label"></span>
-    <button id="fullscreen-btn" onclick="toggleFullscreen()">⤢ fullscreen</button>
+  <div id="player-wrap">
+    <video-player style="position:relative">
+      <video-minimal-skin>
+        <video id="vid" slot="media" playsinline autoplay muted></video>
+      </video-minimal-skin>
+      <div id="overlay">
+        <div class="overlay-spinner" id="spinner"></div>
+        <div id="overlay-text">Loading stream…</div>
+        <button id="overlay-retry" onclick="reload()">Retry</button>
+      </div>
+    </video-player>
   </div>
 
 </div>
 
 <script>
-const STREAM_URL = "/api/live/stream";
-const video      = document.getElementById("player");
-const overlay    = document.getElementById("status-overlay");
-const statusText = document.getElementById("status-text");
-const retryBtn   = document.getElementById("retry-btn");
-const liveBadge  = document.getElementById("live-badge");
-const qualLabel  = document.getElementById("quality-label");
+const STREAM   = "/api/live/stream";
+const vid      = document.getElementById("vid");
+const overlay  = document.getElementById("overlay");
+const oText    = document.getElementById("overlay-text");
+const oRetry   = document.getElementById("overlay-retry");
+const spinner  = document.getElementById("spinner");
+const badge    = document.getElementById("live-badge");
 
-let hls         = null;
-let retryTimer  = null;
-let retryCount  = 0;
-const MAX_AUTO_RETRIES = 5;
+let hls        = null;
+let retryTimer = null;
+let retries    = 0;
+const MAX      = 5;
 
-function setStatus(msg, showRetry = false, showSpinner = true) {
+function setOverlay(msg, showRetry = false, showSpinner = true) {
   overlay.classList.remove("hidden");
-  statusText.textContent = msg;
-  retryBtn.classList.toggle("visible", showRetry);
-  const spinner = overlay.querySelector(".status-spinner");
-  spinner.style.display = showSpinner ? "block" : "none";
+  oText.textContent          = msg;
+  oRetry.className           = showRetry ? "show" : "";
+  spinner.style.display      = showSpinner ? "block" : "none";
 }
 
 function hideOverlay() {
   overlay.classList.add("hidden");
-  liveBadge.textContent  = "LIVE";
-  liveBadge.className    = "";
-  liveBadge.style.background = "var(--danger)";
+  badge.textContent  = "LIVE";
+  badge.className    = "";
 }
 
-function startStream() {
+function reload() {
   clearTimeout(retryTimer);
-  retryBtn.classList.remove("visible");
-  setStatus("Loading stream…");
-  liveBadge.textContent = "LOADING";
-  liveBadge.className   = "buffering";
-  qualLabel.textContent = "";
+  retries = 0;
+  start();
+}
+
+function start() {
+  setOverlay("Loading stream…");
+  badge.textContent = "LOADING";
+  badge.className   = "loading";
 
   if (hls) { hls.destroy(); hls = null; }
 
   if (Hls.isSupported()) {
     hls = new Hls({
-      liveSyncDurationCount: 3,
+      liveSyncDurationCount:    3,
       liveMaxLatencyDurationCount: 6,
-      maxBufferLength: 30,
-      xhrSetup: (xhr) => {
-        // no custom headers needed — server handles everything
-      }
+      maxBufferLength:          30,
+    });
+    hls.loadSource(STREAM);
+    hls.attachMedia(vid);
+
+    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+      retries = 0;
+      vid.play().catch(() => { vid.muted = true; vid.play(); });
     });
 
-    hls.loadSource(STREAM_URL);
-    hls.attachMedia(video);
+    hls.on(Hls.Events.FRAG_BUFFERED, () => hideOverlay());
 
-    hls.on(Hls.Events.MANIFEST_PARSED, (_, data) => {
-      retryCount = 0;
-      const levels = data.levels;
-      if (levels.length) {
-        const best = levels[levels.length - 1];
-        qualLabel.textContent = best.width ? `${best.width}×${best.height}` : "";
-      }
-      video.play().catch(() => {
-        // autoplay blocked — unmute and try again
-        video.muted = false;
-        video.play().catch(() => {});
-      });
-    });
-
-    hls.on(Hls.Events.FRAG_BUFFERED, () => {
-      hideOverlay();
-    });
-
-    hls.on(Hls.Events.ERROR, (_, data) => {
-      if (!data.fatal) return;
-      if (retryCount < MAX_AUTO_RETRIES) {
-        retryCount++;
-        const wait = retryCount * 3;
-        setStatus(`Stream error — retrying in ${wait}s… (${retryCount}/${MAX_AUTO_RETRIES})`);
-        liveBadge.textContent = "RETRYING";
-        liveBadge.className   = "buffering";
-        retryTimer = setTimeout(startStream, wait * 1000);
+    hls.on(Hls.Events.ERROR, (_, d) => {
+      if (!d.fatal) return;
+      if (retries < MAX) {
+        retries++;
+        const wait = retries * 3;
+        setOverlay(`Reconnecting… (${retries}/${MAX})`);
+        badge.textContent = "RETRYING";
+        retryTimer = setTimeout(start, wait * 1000);
       } else {
-        setStatus("Stream unavailable. Try refreshing.", true, false);
-        liveBadge.textContent = "OFFLINE";
-        liveBadge.className   = "buffering";
+        setOverlay("Stream unavailable.", true, false);
+        badge.textContent = "OFFLINE";
+        badge.className   = "loading";
       }
     });
 
-  } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-    // Safari / native HLS
-    video.src = STREAM_URL;
-    video.addEventListener("loadedmetadata", () => {
-      hideOverlay();
-      video.play().catch(() => {});
-    }, { once: true });
-    video.addEventListener("error", () => {
-      if (retryCount < MAX_AUTO_RETRIES) {
-        retryCount++;
-        retryTimer = setTimeout(startStream, retryCount * 3000);
-      } else {
-        setStatus("Stream unavailable.", true, false);
-      }
+  } else if (vid.canPlayType("application/vnd.apple.mpegurl")) {
+    vid.src = STREAM;
+    vid.addEventListener("loadedmetadata", () => { hideOverlay(); vid.play(); }, { once: true });
+    vid.addEventListener("error", () => {
+      if (retries < MAX) { retries++; retryTimer = setTimeout(start, retries * 3000); }
+      else setOverlay("Stream unavailable.", true, false);
     }, { once: true });
   } else {
-    setStatus("HLS not supported in this browser.", true, false);
+    setOverlay("HLS not supported in this browser.", true, false);
   }
 }
 
-function toggleFullscreen() {
-  const wrap = document.getElementById("video-wrap");
-  if (!document.fullscreenElement) {
-    (wrap.requestFullscreen || wrap.webkitRequestFullscreen || wrap.mozRequestFullScreen).call(wrap);
-  } else {
-    (document.exitFullscreen || document.webkitExitFullscreen || document.mozCancelFullScreen).call(document);
-  }
-}
+// tap video to unmute
+vid.addEventListener("click", () => { vid.muted = !vid.muted; });
 
-// unmute on tap (needed on mobile/TV after autoplay muted)
-video.addEventListener("click", () => {
-  video.muted = !video.muted;
-});
-
-startStream();
+start();
 </script>
 </body>
 </html>
