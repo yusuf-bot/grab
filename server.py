@@ -81,32 +81,44 @@ def log(msg):
 
 
 # ── TMDB helpers ──────────────────────────────────────────────────────────────
+
 async def tmdb_get(path: str, **params) -> dict:
     params["api_key"] = TMDB_KEY
     url = TMDB_BASE + path + "?" + urllib.parse.urlencode(params)
-    async with httpx.AsyncClient(timeout=10, proxy=TOR_PROXY if TOR_PROXY else None) as c:
+    async with httpx.AsyncClient(timeout=10) as c:
         r = await c.get(url)
         r.raise_for_status()
         return r.json()
+
 
 # ── Search ────────────────────────────────────────────────────────────────────
 
 @app.get("/api/search", dependencies=[Depends(verify)])
 async def search(q: str):
     data = await tmdb_get("/search/multi", query=q, include_adult=False)
-    return [
-        {
-            "tmdb_id": r["id"],
-            "imdb_id": None,
-            "title":   r.get("title") or r.get("name", ""),
+    out  = []
+    for r in data.get("results", [])[:10]:
+        mt = r.get("media_type")
+        if mt not in ("movie", "tv"):
+            continue
+        imdb_id = None
+        try:
+            ext     = await tmdb_get(f"/{mt}/{r['id']}/external_ids")
+            imdb_id = ext.get("imdb_id")
+        except Exception as e:
+            log(f"external_ids error for {r['id']}: {e}")
+        out.append({
+            "tmdb_id": r.get("id"),
+            "imdb_id": imdb_id,
+            "title":   r.get("title") or r.get("name") or "",
             "year":    (r.get("release_date") or r.get("first_air_date") or "")[:4],
-            "type":    r["media_type"],
+            "type":    mt,
             "rating":  round(r.get("vote_average", 0), 1),
             "poster":  TMDB_IMG + r["poster_path"] if r.get("poster_path") else "",
-        }
-        for r in data.get("results", [])[:10]
-        if r.get("media_type") in ("movie", "tv")
-    ]
+        })
+    return out
+
+
 # ── Detail ────────────────────────────────────────────────────────────────────
 
 @app.get("/api/detail", dependencies=[Depends(verify)])
@@ -155,36 +167,6 @@ async def season(tmdb_id: int, s: int):
         for ep in d.get("episodes", [])
     ]
 
-@app.get("/api/still", dependencies=[Depends(verify)])
-async def get_still(tmdb_id: int, season: int, episode: int):
-    """Fetch episode still path from TMDB, return image proxied through server."""
-    data = await tmdb_get(f"/tv/{tmdb_id}/season/{season}/episode/{episode}")
-    still_path = data.get("still_path")
-    if not still_path:
-        raise HTTPException(404, "No still available")
-    img_url = f"https://image.tmdb.org/t/p/w300{still_path}"
-    async with httpx.AsyncClient(timeout=15) as c:
-        r = await c.get(img_url)
-        r.raise_for_status()
-    return Response(content=r.content, media_type=r.headers.get("content-type", "image/jpeg"),
-                    headers={"Cache-Control": "public, max-age=86400"})
-
-
-@app.get("/api/poster", dependencies=[Depends(verify)])
-async def get_poster(tmdb_id: int, type: str, size: str = "w342"):
-    """Proxy a poster image through the server."""
-    if size not in ("w92", "w342", "w780"):
-        raise HTTPException(400, "Invalid size")
-    d = await tmdb_get(f"/{type}/{tmdb_id}")
-    poster_path = d.get("poster_path")
-    if not poster_path:
-        raise HTTPException(404, "No poster available")
-    img_url = f"https://image.tmdb.org/t/p/{size}{poster_path}"
-    async with httpx.AsyncClient(timeout=15) as c:
-        r = await c.get(img_url)
-        r.raise_for_status()
-    return Response(content=r.content, media_type=r.headers.get("content-type", "image/jpeg"),
-                    headers={"Cache-Control": "public, max-age=86400"})
 
 # ── M3U8 extraction via Playwright ────────────────────────────────────────────
 
@@ -500,3 +482,108 @@ if __name__ == "__main__":
     import uvicorn
     PORT = int(os.environ.get("PORT", 9090))
     uvicorn.run(app, host="0.0.0.0", port=PORT)
+
+
+# ── Live stream ───────────────────────────────────────────────────────────────
+
+LIVE_URL = os.environ.get("LIVE_URL", "")
+
+LIVE_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    "Referer":    "https://24start.net/",
+    "Origin":     "https://24start.net",
+}
+
+@app.get("/live", response_class=HTMLResponse)
+async def live_page():
+    return open("live.html").read()
+
+
+@app.get("/api/live/stream")
+async def live_stream():
+    """Fetch master playlist from LIVE_URL, rewrite segment URLs through /api/live/proxy."""
+    if not LIVE_URL:
+        raise HTTPException(503, "LIVE_URL not configured")
+    try:
+        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+            r = await client.get(LIVE_URL, headers=LIVE_HEADERS)
+            r.raise_for_status()
+            master = r.text
+
+        # Rewrite all URLs in the playlist to go through our proxy
+        base = LIVE_URL.rsplit("/", 1)[0] + "/"
+        lines = []
+        for line in master.splitlines():
+            stripped = line.strip()
+            if stripped and not stripped.startswith("#"):
+                abs_url = stripped if stripped.startswith("http") else base + stripped
+                line = f"/api/live/proxy?url={urllib.parse.quote(abs_url, safe='')}"
+            lines.append(line)
+
+        return Response(
+            content="\n".join(lines).encode(),
+            media_type="application/vnd.apple.mpegurl",
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Cache-Control": "no-cache, no-store",
+            }
+        )
+    except Exception as e:
+        log(f"Live stream error: {e}")
+        raise HTTPException(502, f"Could not fetch stream: {e}")
+
+
+@app.get("/api/live/proxy")
+async def live_proxy(url: str):
+    """Proxy live stream playlists and segments, rewriting nested playlist URLs."""
+    parsed = urllib.parse.urlparse(url)
+    allowed = (
+        "storage.googleapis.com",
+        "24start.net",
+        "peulleieo.net",
+        "boanki.net",
+    )
+    if not any(parsed.netloc.endswith(d) for d in allowed):
+        raise HTTPException(403, f"Domain not allowed: {parsed.netloc}")
+
+    try:
+        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+            r = await client.get(url, headers=LIVE_HEADERS)
+            r.raise_for_status()
+
+        ct = r.headers.get("content-type", "application/octet-stream")
+
+        # Rewrite nested playlists (media playlists inside a master)
+        if "mpegurl" in ct or url.split("?")[0].endswith(".m3u8"):
+            base = url.rsplit("/", 1)[0] + "/"
+            lines = []
+            for line in r.text.splitlines():
+                stripped = line.strip()
+                if stripped and not stripped.startswith("#"):
+                    abs_url = stripped if stripped.startswith("http") else base + stripped
+                    line = f"/api/live/proxy?url={urllib.parse.quote(abs_url, safe='')}"
+                lines.append(line)
+            return Response(
+                content="\n".join(lines).encode(),
+                media_type="application/vnd.apple.mpegurl",
+                headers={
+                    "Access-Control-Allow-Origin": "*",
+                    "Cache-Control": "no-cache, no-store",
+                }
+            )
+
+        # Segments — stream through
+        return Response(
+            content=r.content,
+            media_type=ct,
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Cache-Control": "max-age=60",
+            }
+        )
+
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(e.response.status_code, f"Upstream error: {e}")
+    except Exception as e:
+        log(f"Live proxy error: {e}")
+        raise HTTPException(502, f"Proxy error: {e}")

@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>grab · live</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7/dist/hls.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:      #0e0e0f;
+    --surface: #181819;
+    --border:  #2a2a2c;
+    --text:    #e8e8e6;
+    --muted:   #6b6b6e;
+    --accent:  #c8f065;
+    --danger:  #f06565;
+    --mono:    'DM Mono', monospace;
+    --sans:    'DM Sans', sans-serif;
+    --radius:  12px;
+  }
+
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 15px;
+    min-height: 100dvh;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+
+  /* ── Layout ── */
+  #app {
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
+    padding: env(safe-area-inset-top, 0) 0 env(safe-area-inset-bottom, 0) 0;
+  }
+
+  /* ── Header ── */
+  #top-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px 10px;
+    flex-shrink: 0;
+    background: var(--bg);
+  }
+  #back-btn {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--muted);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  #back-btn:hover { color: var(--text); }
+  #channel-name {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text);
+    flex: 1;
+  }
+  #live-badge {
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 3px 8px;
+    border-radius: 6px;
+    background: var(--danger);
+    color: #fff;
+    letter-spacing: 0.05em;
+  }
+  #live-badge.buffering {
+    background: #333;
+    color: var(--muted);
+  }
+  #refresh-btn {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 5px 10px;
+    cursor: pointer;
+  }
+  #refresh-btn:hover { color: var(--text); border-color: #444; }
+  #refresh-btn:active { transform: scale(0.96); }
+
+  /* ── Video container ── */
+  #video-wrap {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #000;
+    position: relative;
+    overflow: hidden;
+  }
+
+  video {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+    background: #000;
+  }
+
+  /* ── Status overlay ── */
+  #status-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    background: rgba(0,0,0,0.75);
+    backdrop-filter: blur(4px);
+  }
+  #status-overlay.hidden { display: none; }
+
+  .status-spinner {
+    width: 32px; height: 32px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  #status-text {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--muted);
+    text-align: center;
+    max-width: 240px;
+    line-height: 1.5;
+  }
+
+  #retry-btn {
+    font-family: var(--mono);
+    font-size: 13px;
+    background: var(--accent);
+    color: #0e0e0f;
+    border: none;
+    border-radius: var(--radius);
+    padding: 10px 20px;
+    cursor: pointer;
+    display: none;
+  }
+  #retry-btn.visible { display: block; }
+  #retry-btn:active { transform: scale(0.97); }
+
+  /* ── Bottom bar ── */
+  #bottom-bar {
+    flex-shrink: 0;
+    padding: 10px 16px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--bg);
+  }
+  #quality-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    margin-left: auto;
+  }
+  #fullscreen-btn {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 5px 10px;
+    cursor: pointer;
+  }
+  #fullscreen-btn:hover { color: var(--text); border-color: #444; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div id="top-bar">
+    <button id="back-btn" onclick="window.location='/'">← back</button>
+    <span id="channel-name">Sky Sports</span>
+    <span id="live-badge" class="buffering">LOADING</span>
+    <button id="refresh-btn" onclick="startStream()">↺ refresh</button>
+  </div>
+
+  <div id="video-wrap">
+    <video id="player" playsinline autoplay muted></video>
+    <div id="status-overlay">
+      <div class="status-spinner"></div>
+      <div id="status-text">Loading stream…</div>
+      <button id="retry-btn" onclick="startStream()">Retry</button>
+    </div>
+  </div>
+
+  <div id="bottom-bar">
+    <span id="quality-label"></span>
+    <button id="fullscreen-btn" onclick="toggleFullscreen()">⤢ fullscreen</button>
+  </div>
+
+</div>
+
+<script>
+const STREAM_URL = "/api/live/stream";
+const video      = document.getElementById("player");
+const overlay    = document.getElementById("status-overlay");
+const statusText = document.getElementById("status-text");
+const retryBtn   = document.getElementById("retry-btn");
+const liveBadge  = document.getElementById("live-badge");
+const qualLabel  = document.getElementById("quality-label");
+
+let hls         = null;
+let retryTimer  = null;
+let retryCount  = 0;
+const MAX_AUTO_RETRIES = 5;
+
+function setStatus(msg, showRetry = false, showSpinner = true) {
+  overlay.classList.remove("hidden");
+  statusText.textContent = msg;
+  retryBtn.classList.toggle("visible", showRetry);
+  const spinner = overlay.querySelector(".status-spinner");
+  spinner.style.display = showSpinner ? "block" : "none";
+}
+
+function hideOverlay() {
+  overlay.classList.add("hidden");
+  liveBadge.textContent  = "LIVE";
+  liveBadge.className    = "";
+  liveBadge.style.background = "var(--danger)";
+}
+
+function startStream() {
+  clearTimeout(retryTimer);
+  retryBtn.classList.remove("visible");
+  setStatus("Loading stream…");
+  liveBadge.textContent = "LOADING";
+  liveBadge.className   = "buffering";
+  qualLabel.textContent = "";
+
+  if (hls) { hls.destroy(); hls = null; }
+
+  if (Hls.isSupported()) {
+    hls = new Hls({
+      liveSyncDurationCount: 3,
+      liveMaxLatencyDurationCount: 6,
+      maxBufferLength: 30,
+      xhrSetup: (xhr) => {
+        // no custom headers needed — server handles everything
+      }
+    });
+
+    hls.loadSource(STREAM_URL);
+    hls.attachMedia(video);
+
+    hls.on(Hls.Events.MANIFEST_PARSED, (_, data) => {
+      retryCount = 0;
+      const levels = data.levels;
+      if (levels.length) {
+        const best = levels[levels.length - 1];
+        qualLabel.textContent = best.width ? `${best.width}×${best.height}` : "";
+      }
+      video.play().catch(() => {
+        // autoplay blocked — unmute and try again
+        video.muted = false;
+        video.play().catch(() => {});
+      });
+    });
+
+    hls.on(Hls.Events.FRAG_BUFFERED, () => {
+      hideOverlay();
+    });
+
+    hls.on(Hls.Events.ERROR, (_, data) => {
+      if (!data.fatal) return;
+      if (retryCount < MAX_AUTO_RETRIES) {
+        retryCount++;
+        const wait = retryCount * 3;
+        setStatus(`Stream error — retrying in ${wait}s… (${retryCount}/${MAX_AUTO_RETRIES})`);
+        liveBadge.textContent = "RETRYING";
+        liveBadge.className   = "buffering";
+        retryTimer = setTimeout(startStream, wait * 1000);
+      } else {
+        setStatus("Stream unavailable. Try refreshing.", true, false);
+        liveBadge.textContent = "OFFLINE";
+        liveBadge.className   = "buffering";
+      }
+    });
+
+  } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+    // Safari / native HLS
+    video.src = STREAM_URL;
+    video.addEventListener("loadedmetadata", () => {
+      hideOverlay();
+      video.play().catch(() => {});
+    }, { once: true });
+    video.addEventListener("error", () => {
+      if (retryCount < MAX_AUTO_RETRIES) {
+        retryCount++;
+        retryTimer = setTimeout(startStream, retryCount * 3000);
+      } else {
+        setStatus("Stream unavailable.", true, false);
+      }
+    }, { once: true });
+  } else {
+    setStatus("HLS not supported in this browser.", true, false);
+  }
+}
+
+function toggleFullscreen() {
+  const wrap = document.getElementById("video-wrap");
+  if (!document.fullscreenElement) {
+    (wrap.requestFullscreen || wrap.webkitRequestFullscreen || wrap.mozRequestFullScreen).call(wrap);
+  } else {
+    (document.exitFullscreen || document.webkitExitFullscreen || document.mozCancelFullScreen).call(document);
+  }
+}
+
+// unmute on tap (needed on mobile/TV after autoplay muted)
+video.addEventListener("click", () => {
+  video.muted = !video.muted;
+});
+
+startStream();
+</script>
+</body>
+</html>

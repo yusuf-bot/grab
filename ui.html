@@ -78,23 +78,12 @@
   .section-title { font-size: 11px; font-family: var(--mono); color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 10px; }
 
   .card-list { display: flex; flex-direction: column; gap: 6px; }
-
-  /* ── Result cards with poster ── */
   .card {
     background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-    padding: 10px 12px; cursor: pointer; transition: border-color 0.15s, background 0.15s;
+    padding: 13px 14px; cursor: pointer; transition: border-color 0.15s, background 0.15s;
     display: flex; align-items: center; gap: 12px;
   }
   .card:hover { border-color: #444; background: #1e1e1f; }
-  .card-poster {
-    width: 42px; height: 62px; border-radius: 6px; object-fit: cover;
-    background: var(--border); flex-shrink: 0; display: block;
-  }
-  .card-poster-placeholder {
-    width: 42px; height: 62px; border-radius: 6px; background: var(--border);
-    flex-shrink: 0; display: flex; align-items: center; justify-content: center;
-    font-size: 18px; color: var(--muted);
-  }
   .card-body { flex: 1; min-width: 0; }
   .card-title { font-weight: 500; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .card-sub   { font-size: 12px; color: var(--muted); margin-top: 2px; font-family: var(--mono); }
@@ -103,34 +92,6 @@
   .tag-series { background: #1a2a1a; color: var(--accent); }
   .tag-movie  { background: #1a1a2a; color: #a0a0f0; }
 
-  /* ── Hero banner (movie / show detail) ── */
-  .hero-banner {
-    position: relative; border-radius: var(--radius); overflow: hidden;
-    aspect-ratio: 16/9; background: var(--surface); border: 1px solid var(--border);
-  }
-  .hero-banner img {
-    width: 100%; height: 100%; object-fit: cover; display: block;
-    filter: brightness(0.55);
-  }
-  .hero-banner-overlay {
-    position: absolute; inset: 0; display: flex; flex-direction: column;
-    justify-content: flex-end; padding: 14px;
-    background: linear-gradient(to top, rgba(0,0,0,0.85) 0%, transparent 60%);
-  }
-  .hero-title { font-size: 20px; font-weight: 500; line-height: 1.2; }
-  .hero-meta  { font-size: 11px; font-family: var(--mono); color: #bbb; margin-top: 4px; }
-
-  /* ── Movie detail card ── */
-  .movie-detail {
-    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-    overflow: hidden; display: flex; flex-direction: column;
-  }
-  .movie-detail-body { padding: 14px; display: flex; flex-direction: column; gap: 8px; }
-  .movie-title { font-size: 18px; font-weight: 500; }
-  .movie-meta  { font-size: 12px; color: var(--muted); font-family: var(--mono); }
-  .movie-plot  { font-size: 13px; color: #aaa; line-height: 1.55; }
-
-  /* ── Season grid ── */
   .season-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 8px; }
   .season-btn {
     background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
@@ -139,63 +100,17 @@
   .season-btn:hover { border-color: #555; }
   .season-btn.selected { border-color: var(--accent); color: var(--accent); }
 
-  /* ── Episode rows with still preview ── */
-  .ep-list { display: flex; flex-direction: column; gap: 6px; }
+  .ep-list { display: flex; flex-direction: column; gap: 5px; }
   .ep-row {
     display: flex; align-items: center; gap: 10px; background: var(--surface);
-    border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
+    border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px;
     cursor: pointer; transition: border-color 0.15s;
   }
   .ep-row:hover { border-color: #555; }
-  .ep-row.selected { border-color: var(--accent); background: #0f1a00; }
-
-  /* still image on the left */
-  .ep-still-wrap {
-    position: relative; width: 96px; height: 54px; flex-shrink: 0;
-    background: var(--border); overflow: hidden;
-  }
-  .ep-still {
-    width: 100%; height: 100%; object-fit: cover; display: block;
-    transition: transform 0.25s ease;
-  }
-  .ep-row:hover .ep-still { transform: scale(1.05); }
-  .ep-still-placeholder {
-    width: 100%; height: 100%; display: flex; align-items: center;
-    justify-content: center; color: var(--muted); font-size: 20px;
-  }
-  /* YouTube-style play overlay on hover */
-  .ep-play-overlay {
-    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-    background: rgba(0,0,0,0.45); opacity: 0; transition: opacity 0.2s;
-    pointer-events: none;
-  }
-  .ep-row:hover .ep-play-overlay { opacity: 1; }
-  .ep-play-icon {
-    width: 28px; height: 28px; border-radius: 50%;
-    background: rgba(200,240,101,0.9); display: flex; align-items: center; justify-content: center;
-  }
-  .ep-play-icon svg { width: 12px; height: 12px; fill: #0e0e0f; margin-left: 2px; }
-
-  /* ep text content */
-  .ep-content { flex: 1; min-width: 0; padding: 8px 10px 8px 0; }
-  .ep-top { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
-  .ep-num    { font-family: var(--mono); font-size: 11px; color: var(--accent); flex-shrink: 0; }
-  .ep-title  { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .ep-bottom { display: flex; align-items: center; gap: 6px; }
-  .ep-date   { font-family: var(--mono); font-size: 11px; color: var(--muted); }
-  .ep-rating { font-family: var(--mono); font-size: 11px; color: var(--muted); }
-  .ep-overview { font-size: 11px; color: var(--muted); margin-top: 3px; line-height: 1.4;
-    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-
-  /* selection checkbox overlay */
-  .ep-check {
-    width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--border);
-    flex-shrink: 0; margin-right: 10px; display: flex; align-items: center; justify-content: center;
-    transition: border-color 0.15s, background 0.15s;
-  }
-  .ep-row.selected .ep-check { border-color: var(--accent); background: var(--accent); }
-  .ep-check svg { display: none; width: 10px; height: 10px; }
-  .ep-row.selected .ep-check svg { display: block; }
+  .ep-row.selected { border-color: var(--accent); background: #141f00; }
+  .ep-num    { font-family: var(--mono); font-size: 12px; color: var(--accent); width: 32px; flex-shrink: 0; }
+  .ep-title  { flex: 1; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ep-rating { font-family: var(--mono); font-size: 11px; color: var(--muted); flex-shrink: 0; }
 
   .selection-bar {
     position: sticky; bottom: 16px; background: var(--surface); border: 1px solid var(--border);
@@ -207,7 +122,6 @@
   .back-btn { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); background: none; padding: 6px 0; font-family: var(--mono); }
   .back-btn:hover { color: var(--text); }
 
-  /* ── Jobs ── */
   .job-card {
     background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
     padding: 12px 14px; display: flex; flex-direction: column; gap: 8px;
@@ -227,7 +141,14 @@
   .progress-fill.pulse { width: 100%; animation: pulse-bar 1.8s ease-in-out infinite; }
   @keyframes pulse-bar { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
 
-  /* ── Tabs ── */
+  .movie-detail {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 16px; display: flex; flex-direction: column; gap: 10px;
+  }
+  .movie-title { font-size: 18px; font-weight: 500; }
+  .movie-meta  { font-size: 12px; color: var(--muted); font-family: var(--mono); }
+  .movie-plot  { font-size: 13px; color: #aaa; line-height: 1.5; }
+
   .tabs { display: flex; gap: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 3px; }
   .tab  { flex: 1; text-align: center; padding: 8px; border-radius: 8px; font-size: 13px; color: var(--muted); cursor: pointer; transition: background 0.15s, color 0.15s; font-family: var(--mono); background: none; border: none; }
   .tab.active { background: var(--bg); color: var(--text); }
@@ -236,10 +157,6 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   .empty { text-align: center; color: var(--muted); font-size: 13px; padding: 32px 0; font-family: var(--mono); }
   .hidden { display: none !important; }
-
-  /* fade-in for images */
-  .fade-in { animation: fadeIn 0.3s ease; }
-  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 </style>
 </head>
 <body>
@@ -257,6 +174,7 @@
   <div class="tabs">
     <button class="tab active" onclick="switchTab('search')">Search</button>
     <button class="tab" onclick="switchTab('jobs')">Downloads</button>
+    <button class="tab" onclick="window.location='/live'">Live</button>
   </div>
 
   <!-- ── Search tab ── -->
@@ -278,7 +196,6 @@
 
     <div id="view-seasons" class="hidden">
       <button class="back-btn" onclick="goBack('results')">← back</button>
-      <div id="season-hero" style="margin-top:12px"></div>
       <div id="season-header" style="margin-top:12px"></div>
       <div id="season-grid" class="season-grid" style="margin-top:10px"></div>
     </div>
@@ -316,25 +233,17 @@
 
 <script>
 // ── Config ────────────────────────────────────────────────────────────────────
-const SERVER_URL  = window.location.origin;
-const API_KEY = "desmos";
-
-// TMDB image base URLs
-const TMDB_POSTER_SM  = "https://image.tmdb.org/t/p/w92";
-const TMDB_POSTER_MD  = "https://image.tmdb.org/t/p/w342";
-const TMDB_BACKDROP   = "https://image.tmdb.org/t/p/w780";
-const TMDB_STILL      = "https://image.tmdb.org/t/p/w300";  // episode stills
-const TMDB_KEY        = localStorage.getItem("tmdb_key") || "";
+const SERVER_URL = window.location.origin;
+const API_KEY    = localStorage.getItem("api_key") || prompt("Enter API key:") || "";
+if (API_KEY) localStorage.setItem("api_key", API_KEY);
 
 // ── State ─────────────────────────────────────────────────────────────────────
-let currentResults  = [];
-let currentDetail   = null;
-let currentEpisodes = [];
+let currentResults  = [];   // TMDB search results
+let currentDetail   = null; // full detail object from /api/detail
+let currentEpisodes = [];   // episodes from /api/season
 let currentSeason   = null;
 let selectedEps     = new Set();
 let jobs            = {};
-// Cache episode stills: key = "tmdbId_S_E", value = still_path or null
-let stillCache      = {};
 
 // ── Health ────────────────────────────────────────────────────────────────────
 async function checkServer() {
@@ -375,34 +284,6 @@ async function api(path) {
   return r.json();
 }
 
-// Fetch episode stills directly from TMDB (no auth needed for images, but need key for API)
-async function fetchEpisodeStill(tmdbId, season, episode) {
-  const cacheKey = `${tmdbId}_${season}_${episode}`;
-  if (cacheKey in stillCache) return stillCache[cacheKey];
-
-  // We get stills via our own /api/season which already returns episode data,
-  // but episode stills need a separate TMDB call. We'll do it client-side if TMDB_KEY is stored,
-  // or fall back to null (placeholder).
-  // Actually we can piggyback on the episode data returned — TMDB /season/{s} includes still_path.
-  // We already store currentEpisodes from /api/season. We just need still_path added server-side.
-  // For now, attempt via TMDB directly if key available.
-  const key = localStorage.getItem("tmdb_key");
-  if (!key) { stillCache[cacheKey] = null; return null; }
-
-  try {
-    const url = `https://api.themoviedb.org/3/tv/${tmdbId}/season/${season}/episode/${episode}/images?api_key=${key}`;
-    const r = await fetch(url);
-    if (!r.ok) throw new Error();
-    const data = await r.json();
-    const still = data.stills?.[0]?.file_path || null;
-    stillCache[cacheKey] = still;
-    return still;
-  } catch {
-    stillCache[cacheKey] = null;
-    return null;
-  }
-}
-
 // ── Views ─────────────────────────────────────────────────────────────────────
 function showView(name) {
   ["search","results","seasons","episodes","movie"].forEach(v =>
@@ -439,33 +320,28 @@ function renderResults() {
     list.innerHTML = '<div class="empty">No results</div>';
     return;
   }
-  list.innerHTML = currentResults.map((r, i) => {
-    const posterHtml = r.poster
-      ? `<img class="card-poster" src="${r.poster}" alt="" loading="lazy" onerror="this.style.display='none'">`
-      : `<div class="card-poster-placeholder">🎬</div>`;
-    return `
-      <div class="card" onclick="pickTitle(${i})">
-        ${posterHtml}
-        <div class="card-body">
-          <div class="card-title">${r.title}</div>
-          <div class="card-sub">${r.year || "?"} · ★ ${r.rating || "?"}</div>
-        </div>
-        <span class="tag ${r.type === 'tv' ? 'tag-series' : 'tag-movie'}">${r.type}</span>
+  // TMDB fields: r.title, r.tmdb_id, r.imdb_id, r.year, r.type, r.rating
+  list.innerHTML = currentResults.map((r, i) => `
+    <div class="card" onclick="pickTitle(${i})">
+      <div class="card-body">
+        <div class="card-title">${r.title}</div>
+        <div class="card-sub">${r.year || "?"} · ★ ${r.rating || "?"}</div>
       </div>
-    `;
-  }).join("");
+      <span class="tag ${r.type === 'tv' ? 'tag-series' : 'tag-movie'}">${r.type}</span>
+    </div>
+  `).join("");
 }
 
 async function pickTitle(i) {
   const r = currentResults[i];
-  currentDetail = r;
+  currentDetail = r; // store the search result; detail will be loaded below
 
   if (r.type === "movie") {
     showView("movie");
     await loadMovieDetail(r.tmdb_id);
   } else {
     showView("seasons");
-    await loadSeasons(r.tmdb_id, r.title, r.poster);
+    await loadSeasons(r.tmdb_id, r.title);
   }
 }
 
@@ -474,36 +350,19 @@ async function loadMovieDetail(tmdbId) {
   const el = document.getElementById("movie-detail");
   el.innerHTML = '<div class="spinner" style="margin:20px auto"></div>';
   try {
+    // TMDB detail: d.title, d.year, d.genres, d.rating, d.overview, d.imdb_id, d.runtime
     const d = await api(`/api/detail?tmdb_id=${tmdbId}&type=movie`);
-    currentDetail = d;
+    currentDetail = d; // update with full detail
     const safeTitle = d.title.replace(/'/g, "\\'");
-
-    // Backdrop image — use w780 version (bigger than poster)
-    const backdropSrc = d.poster
-      ? d.poster.replace("/w92/", "/w780/").replace("/w342/", "/w780/")
-      : "";
-
-    const heroHtml = backdropSrc ? `
-      <div class="hero-banner" style="margin-bottom:12px">
-        <img src="${backdropSrc}" alt="${d.title}" class="fade-in">
-        <div class="hero-banner-overlay">
-          <div class="hero-title">${d.title} <span style="opacity:0.6;font-weight:300">(${d.year})</span></div>
-          <div class="hero-meta">${[d.genres, d.runtime ? d.runtime + " min" : "", d.rating ? "★ " + d.rating : ""].filter(Boolean).join(" · ")}</div>
-        </div>
-      </div>` : "";
-
     el.innerHTML = `
-      ${heroHtml}
       <div class="movie-detail">
-        <div class="movie-detail-body">
-          ${!backdropSrc ? `<div class="movie-title">${d.title} <span style="color:var(--muted);font-weight:300">(${d.year})</span></div>` : ""}
-          ${!backdropSrc ? `<div class="movie-meta">${[d.genres, d.runtime ? d.runtime + " min" : "", d.rating ? "★ " + d.rating : ""].filter(Boolean).join(" · ")}</div>` : ""}
-          ${d.overview ? `<div class="movie-plot">${d.overview}</div>` : ""}
-          <button class="btn-primary" style="margin-top:4px"
-            onclick="queueDownload({type:'movie',imdb:'${d.imdb_id}',label:'${safeTitle}',season:0,episode:0})">
-            Download
-          </button>
-        </div>
+        <div class="movie-title">${d.title} <span style="color:var(--muted);font-weight:300">(${d.year})</span></div>
+        <div class="movie-meta">${[d.genres, d.runtime ? d.runtime + " min" : "", d.rating ? "★ " + d.rating : ""].filter(Boolean).join(" · ")}</div>
+        ${d.overview ? `<div class="movie-plot">${d.overview}</div>` : ""}
+        <button class="btn-primary" style="margin-top:8px"
+          onclick="queueDownload({type:'movie',imdb:'${d.imdb_id}',label:'${safeTitle}',season:0,episode:0})">
+          Download
+        </button>
       </div>
     `;
   } catch(e) {
@@ -512,41 +371,17 @@ async function loadMovieDetail(tmdbId) {
 }
 
 // ── Series ────────────────────────────────────────────────────────────────────
-async function loadSeasons(tmdbId, title, posterThumb) {
-  // Show hero with poster while loading detail
-  const heroEl = document.getElementById("season-hero");
-  const posterSrc = posterThumb ? posterThumb.replace("/w92/", "/w342/") : "";
-  heroEl.innerHTML = posterSrc ? `
-    <div class="hero-banner">
-      <img src="${posterSrc}" alt="${title}" class="fade-in" style="filter:brightness(0.45)">
-      <div class="hero-banner-overlay">
-        <div class="hero-title">${title}</div>
-      </div>
-    </div>` : "";
-
-  document.getElementById("season-header").innerHTML = `<p class="section-title">Select season</p>`;
+async function loadSeasons(tmdbId, title) {
+  document.getElementById("season-header").innerHTML = `<p class="section-title">${title}</p>`;
   const grid = document.getElementById("season-grid");
   grid.innerHTML = '<div class="spinner" style="margin:12px 0"></div>';
   try {
+    // TMDB detail: d.total_seasons
     const d = await api(`/api/detail?tmdb_id=${tmdbId}&type=tv`);
-    currentDetail = d;
-
-    // Update hero with better backdrop if available
-    if (d.poster) {
-      const bigPoster = d.poster.replace("/w92/", "/w342/");
-      heroEl.innerHTML = `
-        <div class="hero-banner">
-          <img src="${bigPoster}" alt="${d.title}" class="fade-in" style="filter:brightness(0.45)">
-          <div class="hero-banner-overlay">
-            <div class="hero-title">${d.title}</div>
-            <div class="hero-meta">${[d.year, d.genres, d.rating ? "★ " + d.rating : ""].filter(Boolean).join(" · ")}</div>
-          </div>
-        </div>`;
-    }
-
+    currentDetail = d; // update with full detail including imdb_id
     const n = d.total_seasons || 1;
     grid.innerHTML = Array.from({length: n}, (_, i) => i + 1).map(s =>
-      `<button class="season-btn" onclick="pickSeason(${s})">S${String(s).padStart(2,"0")}</button>`
+      `<button class="season-btn" onclick="pickSeason(${s})">${s}</button>`
     ).join("");
   } catch(e) {
     grid.innerHTML = '<div class="empty">Failed</div>';
@@ -557,7 +392,7 @@ async function pickSeason(s) {
   currentSeason = s;
   selectedEps.clear();
   document.querySelectorAll(".season-btn").forEach(b =>
-    b.classList.toggle("selected", parseInt(b.textContent.replace("S","")) === s)
+    b.classList.toggle("selected", parseInt(b.textContent) === s)
   );
   showView("episodes");
   await loadEpisodes(currentDetail.tmdb_id, s);
@@ -570,43 +405,12 @@ async function loadEpisodes(tmdbId, season) {
   list.innerHTML = '<div class="spinner" style="margin:12px 0"></div>';
   document.getElementById("sel-bar").classList.add("hidden");
   try {
+    // TMDB season: ep.episode, ep.title, ep.rating, ep.air_date, ep.overview
     currentEpisodes = await api(`/api/season?tmdb_id=${tmdbId}&s=${season}`);
     renderEpisodes();
-    
   } catch(e) {
     list.innerHTML = '<div class="empty">Failed to load episodes</div>';
   }
-}
-
-// Fetch stills for all episodes in background, update DOM as they come in
-async function loadStillsInBackground(tmdbId, season) {
-  for (let i = 0; i < currentEpisodes.length; i++) {
-    const ep = currentEpisodes[i];
-    const cacheKey = `${tmdbId}_${season}_${ep.episode}`;
-    if (stillCache[cacheKey] !== undefined) {
-      updateEpStill(i, stillCache[cacheKey]);
-      continue;
-    }
-    await new Promise(r => setTimeout(r, 80));
-    // Use server proxy — TMDB key stays on backend
-    const stillSrc = `${SERVER_URL}/api/still?tmdb_id=${tmdbId}&season=${season}&episode=${ep.episode}`;
-    stillCache[cacheKey] = stillSrc;
-    updateEpStill(i, stillSrc);
-  }
-}
-
-function updateEpStill(index, stillSrc) {
-  const wrap = document.getElementById(`ep-still-${index}`);
-  if (!wrap || !stillSrc) return;
-  wrap.innerHTML = `
-    <img class="ep-still fade-in" src="${stillSrc}"
-         alt="" loading="lazy"
-         onerror="this.parentElement.innerHTML='<div class=\'ep-still-placeholder\'>▶</div>'"
-         fetchpriority="low">
-    <div class="ep-play-overlay"><div class="ep-play-icon">
-      <svg viewBox="0 0 10 12"><polygon points="0,0 10,6 0,12"/></svg>
-    </div></div>
-  `;
 }
 
 function renderEpisodes() {
@@ -617,20 +421,9 @@ function renderEpisodes() {
   }
   list.innerHTML = currentEpisodes.map((ep, i) => `
     <div class="ep-row ${selectedEps.has(i) ? 'selected' : ''}" onclick="toggleEp(${i})">
-      <div class="ep-content">
-        <div class="ep-top">
-          <span class="ep-num">E${String(ep.episode).padStart(2,"0")}</span>
-          <span class="ep-title">${ep.title}</span>
-        </div>
-        ${ep.overview ? `<div class="ep-overview">${ep.overview}</div>` : ""}
-        <div class="ep-bottom">
-          ${ep.air_date ? `<span class="ep-date">${ep.air_date}</span>` : ""}
-          ${ep.rating   ? `<span class="ep-rating">★ ${ep.rating}</span>` : ""}
-        </div>
-      </div>
-      <div class="ep-check">
-        <svg viewBox="0 0 10 8" fill="none" stroke="#0e0e0f" stroke-width="2"><polyline points="1,4 3.5,7 9,1"/></svg>
-      </div>
+      <span class="ep-num">E${String(ep.episode).padStart(2, "0")}</span>
+      <span class="ep-title">${ep.title}</span>
+      <span class="ep-rating">${ep.rating ? "★ " + ep.rating : ""}</span>
     </div>
   `).join("");
   updateSelBar();
@@ -638,13 +431,7 @@ function renderEpisodes() {
 
 function toggleEp(i) {
   if (selectedEps.has(i)) selectedEps.delete(i); else selectedEps.add(i);
-  const row = document.querySelectorAll(".ep-row")[i];
-  if (row) {
-    row.classList.toggle("selected", selectedEps.has(i));
-    const check = row.querySelector(".ep-check");
-    if (check) check.querySelector("svg").style.display = selectedEps.has(i) ? "block" : "none";
-  }
-  updateSelBar();
+  renderEpisodes();
 }
 
 function clearSelection() { selectedEps.clear(); renderEpisodes(); }
@@ -661,7 +448,7 @@ async function downloadSelected() {
   for (const ep of eps) {
     queueDownload({
       type:    "tv",
-      imdb:    currentDetail.imdb_id,
+      imdb:    currentDetail.imdb_id,   // imdb_id from TMDB detail
       season:  currentSeason,
       episode: ep.episode,
       label:   `${currentDetail.title} S${String(currentSeason).padStart(2,"0")}E${String(ep.episode).padStart(2,"0")}`,
@@ -715,6 +502,7 @@ async function queueDownload(payload) {
     triggerSave(blob, stem + ".mp4");
     set("done", `MP4 saved · ${(blob.size / 1_048_576).toFixed(1)} MB`, 100);
 
+    // Subtitle — best effort
     try {
       const subPath = payload.type === "tv"
         ? `/api/subtitle?imdb=${payload.imdb}&season=${payload.season}&episode=${payload.episode}`
@@ -768,9 +556,6 @@ function clearDoneJobs() {
   });
   renderJobs();
 }
-
-// ── TMDB key prompt (for stills) ──────────────────────────────────────────────
-
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 checkServer();
