@@ -19,6 +19,7 @@ RUN playwright install chromium && playwright install-deps chromium
 COPY server.py .
 COPY ui.html .
 COPY live.html .
+COPY assets/ assets/
 
 EXPOSE ${PORT:-8000}
 
