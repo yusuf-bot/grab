@@ -3,8 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>grab</title>
+<title>Grab</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="icon" type="image/png" href="/favicon.ico">
+<link rel="apple-touch-icon" href="/favicon.ico">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -234,8 +236,7 @@
 <script>
 // ── Config ────────────────────────────────────────────────────────────────────
 const SERVER_URL = window.location.origin;
-const API_KEY    = localStorage.getItem("api_key") || prompt("Enter API key:") || "";
-if (API_KEY) localStorage.setItem("api_key", API_KEY);
+const API_KEY = "desmos";
 
 // ── State ─────────────────────────────────────────────────────────────────────
 let currentResults  = [];   // TMDB search results

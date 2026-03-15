@@ -119,6 +119,117 @@ async def search(q: str):
     return out
 
 
+
+# ── Live stream ───────────────────────────────────────────────────────────────
+
+LIVE_URL = os.environ.get("LIVE_URL", "")
+
+LIVE_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    "Referer":    "https://24start.net/",
+    "Origin":     "https://24start.net",
+}
+
+@app.get("/live", response_class=HTMLResponse)
+async def live_page():
+    return open("live.html").read()
+
+
+@app.get("/api/live/stream")
+async def live_stream():
+    """Fetch master playlist from LIVE_URL, rewrite segment URLs through /api/live/proxy."""
+    if not LIVE_URL:
+        raise HTTPException(503, "LIVE_URL not configured")
+    try:
+        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+            r = await client.get(LIVE_URL, headers=LIVE_HEADERS)
+            r.raise_for_status()
+            master = r.text
+
+        # Rewrite all URLs in the playlist to go through our proxy
+        base = LIVE_URL.rsplit("/", 1)[0] + "/"
+        lines = []
+        for line in master.splitlines():
+            stripped = line.strip()
+            if stripped and not stripped.startswith("#"):
+                abs_url = stripped if stripped.startswith("http") else base + stripped
+                line = f"/api/live/proxy?url={urllib.parse.quote(abs_url, safe='')}"
+            lines.append(line)
+
+        return Response(
+            content="\n".join(lines).encode(),
+            media_type="application/vnd.apple.mpegurl",
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Cache-Control": "no-cache, no-store",
+            }
+        )
+    except Exception as e:
+        log(f"Live stream error: {e}")
+        raise HTTPException(502, f"Could not fetch stream: {e}")
+
+
+@app.get("/api/live/proxy")
+async def live_proxy(url: str):
+    """Proxy live stream playlists and segments, rewriting nested playlist URLs."""
+    parsed = urllib.parse.urlparse(url)
+    allowed = (
+        "storage.googleapis.com",
+        "24start.net",
+        "peulleieo.net",
+        "boanki.net",
+    )
+    if not any(parsed.netloc.endswith(d) for d in allowed):
+        raise HTTPException(403, f"Domain not allowed: {parsed.netloc}")
+
+    try:
+        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+            r = await client.get(url, headers=LIVE_HEADERS)
+            r.raise_for_status()
+
+        ct = r.headers.get("content-type", "application/octet-stream")
+
+        # Rewrite nested playlists (media playlists inside a master)
+        if "mpegurl" in ct or url.split("?")[0].endswith(".m3u8"):
+            base = url.rsplit("/", 1)[0] + "/"
+            lines = []
+            for line in r.text.splitlines():
+                stripped = line.strip()
+                if stripped and not stripped.startswith("#"):
+                    abs_url = stripped if stripped.startswith("http") else base + stripped
+                    line = f"/api/live/proxy?url={urllib.parse.quote(abs_url, safe='')}"
+                lines.append(line)
+            return Response(
+                content="\n".join(lines).encode(),
+                media_type="application/vnd.apple.mpegurl",
+                headers={
+                    "Access-Control-Allow-Origin": "*",
+                    "Cache-Control": "no-cache, no-store",
+                }
+            )
+
+        # Segments — stream through
+        return Response(
+            content=r.content,
+            media_type=ct,
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Cache-Control": "max-age=60",
+            }
+        )
+
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(e.response.status_code, f"Upstream error: {e}")
+    except Exception as e:
+        log(f"Live proxy error: {e}")
+        raise HTTPException(502, f"Proxy error: {e}")
+
+from fastapi.responses import FileResponse
+
+@app.get("/favicon.ico")
+async def favicon():
+    return FileResponse("logo.png", media_type="image/png")
+
 # ── Detail ────────────────────────────────────────────────────────────────────
 
 @app.get("/api/detail", dependencies=[Depends(verify)])
@@ -483,107 +594,3 @@ if __name__ == "__main__":
     PORT = int(os.environ.get("PORT", 9090))
     uvicorn.run(app, host="0.0.0.0", port=PORT)
 
-
-# ── Live stream ───────────────────────────────────────────────────────────────
-
-LIVE_URL = os.environ.get("LIVE_URL", "")
-
-LIVE_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-    "Referer":    "https://24start.net/",
-    "Origin":     "https://24start.net",
-}
-
-@app.get("/live", response_class=HTMLResponse)
-async def live_page():
-    return open("live.html").read()
-
-
-@app.get("/api/live/stream")
-async def live_stream():
-    """Fetch master playlist from LIVE_URL, rewrite segment URLs through /api/live/proxy."""
-    if not LIVE_URL:
-        raise HTTPException(503, "LIVE_URL not configured")
-    try:
-        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
-            r = await client.get(LIVE_URL, headers=LIVE_HEADERS)
-            r.raise_for_status()
-            master = r.text
-
-        # Rewrite all URLs in the playlist to go through our proxy
-        base = LIVE_URL.rsplit("/", 1)[0] + "/"
-        lines = []
-        for line in master.splitlines():
-            stripped = line.strip()
-            if stripped and not stripped.startswith("#"):
-                abs_url = stripped if stripped.startswith("http") else base + stripped
-                line = f"/api/live/proxy?url={urllib.parse.quote(abs_url, safe='')}"
-            lines.append(line)
-
-        return Response(
-            content="\n".join(lines).encode(),
-            media_type="application/vnd.apple.mpegurl",
-            headers={
-                "Access-Control-Allow-Origin": "*",
-                "Cache-Control": "no-cache, no-store",
-            }
-        )
-    except Exception as e:
-        log(f"Live stream error: {e}")
-        raise HTTPException(502, f"Could not fetch stream: {e}")
-
-
-@app.get("/api/live/proxy")
-async def live_proxy(url: str):
-    """Proxy live stream playlists and segments, rewriting nested playlist URLs."""
-    parsed = urllib.parse.urlparse(url)
-    allowed = (
-        "storage.googleapis.com",
-        "24start.net",
-        "peulleieo.net",
-        "boanki.net",
-    )
-    if not any(parsed.netloc.endswith(d) for d in allowed):
-        raise HTTPException(403, f"Domain not allowed: {parsed.netloc}")
-
-    try:
-        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
-            r = await client.get(url, headers=LIVE_HEADERS)
-            r.raise_for_status()
-
-        ct = r.headers.get("content-type", "application/octet-stream")
-
-        # Rewrite nested playlists (media playlists inside a master)
-        if "mpegurl" in ct or url.split("?")[0].endswith(".m3u8"):
-            base = url.rsplit("/", 1)[0] + "/"
-            lines = []
-            for line in r.text.splitlines():
-                stripped = line.strip()
-                if stripped and not stripped.startswith("#"):
-                    abs_url = stripped if stripped.startswith("http") else base + stripped
-                    line = f"/api/live/proxy?url={urllib.parse.quote(abs_url, safe='')}"
-                lines.append(line)
-            return Response(
-                content="\n".join(lines).encode(),
-                media_type="application/vnd.apple.mpegurl",
-                headers={
-                    "Access-Control-Allow-Origin": "*",
-                    "Cache-Control": "no-cache, no-store",
-                }
-            )
-
-        # Segments — stream through
-        return Response(
-            content=r.content,
-            media_type=ct,
-            headers={
-                "Access-Control-Allow-Origin": "*",
-                "Cache-Control": "max-age=60",
-            }
-        )
-
-    except httpx.HTTPStatusError as e:
-        raise HTTPException(e.response.status_code, f"Upstream error: {e}")
-    except Exception as e:
-        log(f"Live proxy error: {e}")
-        raise HTTPException(502, f"Proxy error: {e}")
