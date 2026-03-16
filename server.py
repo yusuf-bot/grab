@@ -59,7 +59,7 @@ if not API_KEY:
 if not TMDB_KEY:
     raise RuntimeError("TMDB_KEY not set")
 
-TMDB_BASE = "https://blue-block-2520.yusuff-0279.workers.dev/"
+TMDB_BASE = "https://blue-block-2520.yusuff-0279.workers.dev"
 TMDB_IMG  = "https://image.tmdb.org/t/p/w92"
 
 CDN_HEADERS = {
