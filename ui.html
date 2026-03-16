@@ -3,10 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Grab</title>
+<title>grab</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="icon" type="image/png" href="/favicon.ico">
-<link rel="apple-touch-icon" href="/favicon.ico">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -158,8 +156,87 @@
   .spinner { width: 18px; height: 18px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0; }
   @keyframes spin { to { transform: rotate(360deg); } }
   .empty { text-align: center; color: var(--muted); font-size: 13px; padding: 32px 0; font-family: var(--mono); }
+
+  /* ── Player view ── */
+  #view-player {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .player-wrap {
+    position: relative;
+    width: 100%;
+    border-radius: 14px;
+    overflow: hidden;
+    background: #000;
+    aspect-ratio: 16/9;
+  }
+
+  video-player {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  video-minimal-skin {
+    --media-border-radius: 14px;
+    color: var(--accent);
+  }
+
+  /* Hide seek/rate for streams — no VOD scrubbing */
+  .player-wrap media-seek-button,
+  .player-wrap media-playback-rate-button { display: none !important; }
+
+  /* Player loading overlay */
+  #player-overlay {
+    position: absolute;
+    inset: 0;
+    border-radius: 14px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    background: rgba(0,0,0,0.82);
+    backdrop-filter: blur(6px);
+    z-index: 20;
+  }
+  #player-overlay.hidden { display: none; }
+  .player-overlay-spinner {
+    width: 28px; height: 28px;
+    border: 2.5px solid rgba(255,255,255,0.12);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.75s linear infinite;
+  }
+  #player-overlay-text {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+    text-align: center;
+  }
+
+  /* Player meta row */
+  .player-meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .player-title {
+    flex: 1;
+    font-size: 14px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
   .hidden { display: none !important; }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7/dist/hls.min.js"></script>
+<script type="module" src="https://cdn.jsdelivr.net/npm/@videojs/html/cdn/video-minimal.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@videojs/html/cdn/video-minimal.css">
 </head>
 <body>
 <div id="app">
@@ -213,6 +290,27 @@
       </div>
     </div>
 
+
+    <!-- Player view -->
+    <div id="view-player" class="hidden">
+      <button class="back-btn" id="player-back-btn" onclick="closePlayer()">← back</button>
+      <div class="player-wrap">
+        <video-player>
+          <video-minimal-skin>
+            <video id="player-vid" slot="media" playsinline autoplay muted></video>
+          </video-minimal-skin>
+        </video-player>
+        <div id="player-overlay">
+          <div class="player-overlay-spinner"></div>
+          <div id="player-overlay-text">Extracting stream…</div>
+        </div>
+      </div>
+      <div class="player-meta">
+        <span class="player-title" id="player-label"></span>
+        <button class="btn-primary btn-sm" id="player-dl-btn" onclick="playerDownload()">Download</button>
+      </div>
+    </div>
+
     <div id="view-movie" class="hidden">
       <button class="back-btn" onclick="goBack('results')">← back</button>
       <div id="movie-detail" style="margin-top:12px"></div>
@@ -236,7 +334,7 @@
 <script>
 // ── Config ────────────────────────────────────────────────────────────────────
 const SERVER_URL = window.location.origin;
-const API_KEY = "desmos";
+const API_KEY    = 'desmos';
 
 // ── State ─────────────────────────────────────────────────────────────────────
 let currentResults  = [];   // TMDB search results
@@ -287,7 +385,7 @@ async function api(path) {
 
 // ── Views ─────────────────────────────────────────────────────────────────────
 function showView(name) {
-  ["search","results","seasons","episodes","movie"].forEach(v =>
+  ["search","results","seasons","episodes","movie","player"].forEach(v =>
     document.getElementById("view-" + v).classList.toggle("hidden", v !== name)
   );
   document.getElementById("view-label").textContent = name;
@@ -421,7 +519,7 @@ function renderEpisodes() {
     return;
   }
   list.innerHTML = currentEpisodes.map((ep, i) => `
-    <div class="ep-row ${selectedEps.has(i) ? 'selected' : ''}" onclick="toggleEp(${i})">
+    <div class="ep-row ${selectedEps.has(i) ? 'selected' : ''}" onclick="openEpisodePlayer(${i})">
       <span class="ep-num">E${String(ep.episode).padStart(2, "0")}</span>
       <span class="ep-title">${ep.title}</span>
       <span class="ep-rating">${ep.rating ? "★ " + ep.rating : ""}</span>
@@ -556,6 +654,134 @@ function clearDoneJobs() {
     if (["done","failed"].includes(jobs[id].status)) delete jobs[id];
   });
   renderJobs();
+}
+
+
+// ── Player ────────────────────────────────────────────────────────────────────
+let playerHls      = null;
+let playerStreamId = null;
+let playerPayload  = null; // for download button
+let playerPollTimer = null;
+
+function openEpisodePlayer(i) {
+  const ep = currentEpisodes[i];
+  playerPayload = {
+    type:    "tv",
+    imdb:    currentDetail.imdb_id,
+    season:  currentSeason,
+    episode: ep.episode,
+    label:   `${currentDetail.title} S${String(currentSeason).padStart(2,"0")}E${String(ep.episode).padStart(2,"0")}`,
+  };
+  _openPlayer(playerPayload.label, `/api/stream/tv?imdb=${playerPayload.imdb}&season=${playerPayload.season}&episode=${playerPayload.episode}`);
+}
+
+function openMoviePlayer(imdb, label) {
+  playerPayload = { type: "movie", imdb, label, season: 0, episode: 0 };
+  _openPlayer(label, `/api/stream/movie?imdb=${imdb}`);
+}
+
+async function _openPlayer(label, startUrl) {
+  // Reset state
+  if (playerHls) { playerHls.destroy(); playerHls = null; }
+  clearTimeout(playerPollTimer);
+  playerStreamId = null;
+
+  document.getElementById("player-label").textContent = label;
+  document.getElementById("player-overlay").classList.remove("hidden");
+  document.getElementById("player-overlay-text").textContent = "Extracting stream…";
+  document.getElementById("player-dl-btn").disabled = true;
+  showView("player");
+
+  // Kick off extraction
+  try {
+    const r = await fetch(SERVER_URL + startUrl, {
+      method: "POST",
+      headers: { "x-api-key": API_KEY }
+    });
+    if (!r.ok) throw new Error(await r.text());
+    const { stream_id } = await r.json();
+    playerStreamId = stream_id;
+    pollStream(stream_id);
+  } catch(e) {
+    document.getElementById("player-overlay-text").textContent = "Error: " + e.message;
+  }
+}
+
+async function pollStream(sid) {
+  try {
+    const r  = await fetch(`${SERVER_URL}/api/stream/status/${sid}`, { headers: { "x-api-key": API_KEY } });
+    const data = await r.json();
+
+    if (data.status === "extracting") {
+      document.getElementById("player-overlay-text").textContent = "Extracting stream…";
+      playerPollTimer = setTimeout(() => pollStream(sid), 2000);
+      return;
+    }
+
+    if (data.status === "error") {
+      document.getElementById("player-overlay-text").textContent = data.error || "Stream extraction failed";
+      return;
+    }
+
+    if (data.status === "ready") {
+      document.getElementById("player-dl-btn").disabled = false;
+      playStream(data.m3u8, data.subs || []);
+    }
+  } catch(e) {
+    playerPollTimer = setTimeout(() => pollStream(sid), 3000);
+  }
+}
+
+function playStream(m3u8Url, subs) {
+  const vid = document.getElementById("player-vid");
+
+  // Load subtitles
+  // Remove old tracks
+  while (vid.firstChild) vid.removeChild(vid.firstChild);
+  subs.forEach((sub, i) => {
+    const track = document.createElement("track");
+    track.kind    = "subtitles";
+    track.label   = sub.label;
+    track.srclang = "en";
+    track.src     = SERVER_URL + sub.url;
+    if (i === 0) track.default = true;
+    vid.appendChild(track);
+  });
+
+  if (playerHls) { playerHls.destroy(); playerHls = null; }
+
+  if (Hls.isSupported()) {
+    playerHls = new Hls({ maxBufferLength: 60 });
+    playerHls.loadSource(SERVER_URL + m3u8Url);
+    playerHls.attachMedia(vid);
+    playerHls.on(Hls.Events.MANIFEST_PARSED, () => {
+      document.getElementById("player-overlay").classList.add("hidden");
+      vid.play().catch(() => { vid.muted = false; vid.play(); });
+    });
+    playerHls.on(Hls.Events.ERROR, (_, d) => {
+      if (d.fatal) document.getElementById("player-overlay-text").textContent = "Stream error — try downloading instead";
+    });
+  } else if (vid.canPlayType("application/vnd.apple.mpegurl")) {
+    vid.src = SERVER_URL + m3u8Url;
+    vid.addEventListener("loadedmetadata", () => {
+      document.getElementById("player-overlay").classList.add("hidden");
+      vid.play();
+    }, { once: true });
+  }
+}
+
+function closePlayer() {
+  if (playerHls) { playerHls.destroy(); playerHls = null; }
+  clearTimeout(playerPollTimer);
+  // Go back to episodes or results depending on type
+  if (playerPayload?.type === "tv") goBack("episodes");
+  else goBack("results");
+}
+
+function playerDownload() {
+  if (!playerPayload) return;
+  queueDownload(playerPayload);
+  switchTabDirect("jobs");
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────

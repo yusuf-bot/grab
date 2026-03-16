@@ -119,117 +119,6 @@ async def search(q: str):
     return out
 
 
-
-# ── Live stream ───────────────────────────────────────────────────────────────
-
-LIVE_URL = os.environ.get("LIVE_URL", "")
-
-LIVE_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-    "Referer":    "https://24start.net/",
-    "Origin":     "https://24start.net",
-}
-
-@app.get("/live", response_class=HTMLResponse)
-async def live_page():
-    return open("live.html").read()
-
-
-@app.get("/api/live/stream")
-async def live_stream():
-    """Fetch master playlist from LIVE_URL, rewrite segment URLs through /api/live/proxy."""
-    if not LIVE_URL:
-        raise HTTPException(503, "LIVE_URL not configured")
-    try:
-        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
-            r = await client.get(LIVE_URL, headers=LIVE_HEADERS)
-            r.raise_for_status()
-            master = r.text
-
-        # Rewrite all URLs in the playlist to go through our proxy
-        base = LIVE_URL.rsplit("/", 1)[0] + "/"
-        lines = []
-        for line in master.splitlines():
-            stripped = line.strip()
-            if stripped and not stripped.startswith("#"):
-                abs_url = stripped if stripped.startswith("http") else base + stripped
-                line = f"/api/live/proxy?url={urllib.parse.quote(abs_url, safe='')}"
-            lines.append(line)
-
-        return Response(
-            content="\n".join(lines).encode(),
-            media_type="application/vnd.apple.mpegurl",
-            headers={
-                "Access-Control-Allow-Origin": "*",
-                "Cache-Control": "no-cache, no-store",
-            }
-        )
-    except Exception as e:
-        log(f"Live stream error: {e}")
-        raise HTTPException(502, f"Could not fetch stream: {e}")
-
-
-@app.get("/api/live/proxy")
-async def live_proxy(url: str):
-    """Proxy live stream playlists and segments, rewriting nested playlist URLs."""
-    parsed = urllib.parse.urlparse(url)
-    allowed = (
-        "storage.googleapis.com",
-        "24start.net",
-        "peulleieo.net",
-        "boanki.net",
-    )
-    if not any(parsed.netloc.endswith(d) for d in allowed):
-        raise HTTPException(403, f"Domain not allowed: {parsed.netloc}")
-
-    try:
-        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
-            r = await client.get(url, headers=LIVE_HEADERS)
-            r.raise_for_status()
-
-        ct = r.headers.get("content-type", "application/octet-stream")
-
-        # Rewrite nested playlists (media playlists inside a master)
-        if "mpegurl" in ct or url.split("?")[0].endswith(".m3u8"):
-            base = url.rsplit("/", 1)[0] + "/"
-            lines = []
-            for line in r.text.splitlines():
-                stripped = line.strip()
-                if stripped and not stripped.startswith("#"):
-                    abs_url = stripped if stripped.startswith("http") else base + stripped
-                    line = f"/api/live/proxy?url={urllib.parse.quote(abs_url, safe='')}"
-                lines.append(line)
-            return Response(
-                content="\n".join(lines).encode(),
-                media_type="application/vnd.apple.mpegurl",
-                headers={
-                    "Access-Control-Allow-Origin": "*",
-                    "Cache-Control": "no-cache, no-store",
-                }
-            )
-
-        # Segments — stream through
-        return Response(
-            content=r.content,
-            media_type=ct,
-            headers={
-                "Access-Control-Allow-Origin": "*",
-                "Cache-Control": "max-age=60",
-            }
-        )
-
-    except httpx.HTTPStatusError as e:
-        raise HTTPException(e.response.status_code, f"Upstream error: {e}")
-    except Exception as e:
-        log(f"Live proxy error: {e}")
-        raise HTTPException(502, f"Proxy error: {e}")
-
-from fastapi.responses import FileResponse
-
-@app.get("/favicon.ico")
-async def favicon():
-    return FileResponse("assets/logo.png", media_type="image/png")
-
 # ── Detail ────────────────────────────────────────────────────────────────────
 
 @app.get("/api/detail", dependencies=[Depends(verify)])
@@ -579,6 +468,181 @@ async def subtitle(imdb: str, season: int = 0, episode: int = 0):
         raise HTTPException(404, "Subtitle fetch failed")
 
 
+
+# ── Stream endpoint (watch in browser) ───────────────────────────────────────
+# In-memory store: stream_id → {m3u8, subs:[{label,path}], created_at}
+import threading as _threading
+_streams: dict = {}
+_streams_lock = _threading.Lock()
+
+def _cleanup_streams():
+    """Delete subtitle files and stream entries older than 4 hours."""
+    while True:
+        _threading.Event().wait(600)  # check every 10 mins
+        now = time.time()
+        with _streams_lock:
+            expired = [sid for sid, s in _streams.items() if now - s["created_at"] > 14400]
+            for sid in expired:
+                for sub in _streams[sid].get("subs", []):
+                    try:
+                        Path(sub["path"]).unlink(missing_ok=True)
+                    except Exception:
+                        pass
+                del _streams[sid]
+                log(f"Stream expired: {sid}")
+
+_t = _threading.Thread(target=_cleanup_streams, daemon=True)
+_t.start()
+
+
+async def _fetch_top3_subtitles(imdb: str, season: int, episode: int) -> list:
+    """Fetch top 3 English subtitles, save to temp files, return list of {label, path, url}."""
+    try:
+        os_proxy = xmlrpc.client.ServerProxy(
+            "https://api.opensubtitles.org/xml-rpc",
+            transport=_OSTransport()
+        )
+        r = os_proxy.LogIn("", "", "en", "cine2.0 v1")
+        if not r.get("status", "").startswith("200"):
+            return []
+        token = r["token"]
+        params = {"imdbid": imdb.lstrip("t"), "sublanguageid": "eng"}
+        if season:
+            params["season"]  = str(season)
+            params["episode"] = str(episode)
+        results = os_proxy.SearchSubtitles(token, [params])
+        subs    = results.get("data") or []
+        os_proxy.LogOut(token)
+
+        out = []
+        for sub in subs[:3]:
+            try:
+                dl_url = sub["SubDownloadLink"]
+                req = urllib.request.Request(dl_url, headers={"User-Agent": "cine2.0 v1"})
+                with urllib.request.urlopen(req, timeout=15) as resp:
+                    srt_bytes = gzip.decompress(resp.read())
+                fname  = f"sub_{imdb}_{season}_{episode}_{sub.get('IDSubtitleFile','')}.srt"
+                fpath  = Path(tempfile.gettempdir()) / fname
+                fpath.write_bytes(srt_bytes)
+                label  = sub.get("SubFileName", fname)
+                out.append({"label": label, "path": str(fpath)})
+            except Exception as e:
+                log(f"Subtitle fetch error: {e}")
+        return out
+    except Exception as e:
+        log(f"Subtitles error: {e}")
+        return []
+
+
+@app.post("/api/stream/tv", dependencies=[Depends(verify)])
+async def stream_tv(imdb: str, season: int, episode: int):
+    """Start async extraction of m3u8 + subtitles for a TV episode."""
+    import uuid as _uuid
+    sid = _uuid.uuid4().hex[:10]
+    with _streams_lock:
+        _streams[sid] = {"status": "extracting", "m3u8": None, "subs": [], "error": None, "created_at": time.time()}
+
+    async def _extract():
+        try:
+            m3u8, subs = await asyncio.gather(
+                extract_m3u8(imdb, season, episode, "tv"),
+                asyncio.to_thread(_fetch_top3_subtitles_sync, imdb, season, episode),
+            )
+            with _streams_lock:
+                _streams[sid]["m3u8"]   = m3u8
+                _streams[sid]["subs"]   = subs
+                _streams[sid]["status"] = "ready" if m3u8 else "error"
+                if not m3u8:
+                    _streams[sid]["error"] = "Could not extract M3U8"
+        except Exception as e:
+            with _streams_lock:
+                _streams[sid]["status"] = "error"
+                _streams[sid]["error"]  = str(e)
+
+    asyncio.create_task(_extract())
+    return {"stream_id": sid}
+
+
+@app.post("/api/stream/movie", dependencies=[Depends(verify)])
+async def stream_movie(imdb: str):
+    """Start async extraction of m3u8 + subtitles for a movie."""
+    import uuid as _uuid
+    sid = _uuid.uuid4().hex[:10]
+    with _streams_lock:
+        _streams[sid] = {"status": "extracting", "m3u8": None, "subs": [], "error": None, "created_at": time.time()}
+
+    async def _extract():
+        try:
+            m3u8, subs = await asyncio.gather(
+                extract_m3u8(imdb, 0, 0, "movie"),
+                asyncio.to_thread(_fetch_top3_subtitles_sync, imdb, 0, 0),
+            )
+            with _streams_lock:
+                _streams[sid]["m3u8"]   = m3u8
+                _streams[sid]["subs"]   = subs
+                _streams[sid]["status"] = "ready" if m3u8 else "error"
+                if not m3u8:
+                    _streams[sid]["error"] = "Could not extract M3U8"
+        except Exception as e:
+            with _streams_lock:
+                _streams[sid]["status"] = "error"
+                _streams[sid]["error"]  = str(e)
+
+    asyncio.create_task(_extract())
+    return {"stream_id": sid}
+
+
+def _fetch_top3_subtitles_sync(imdb: str, season: int, episode: int) -> list:
+    """Sync wrapper for subtitle fetching (run in thread)."""
+    import asyncio as _asyncio
+    loop = _asyncio.new_event_loop()
+    try:
+        return loop.run_until_complete(_fetch_top3_subtitles(imdb, season, episode))
+    finally:
+        loop.close()
+
+
+@app.get("/api/stream/status/{sid}", dependencies=[Depends(verify)])
+async def stream_status(sid: str):
+    with _streams_lock:
+        s = _streams.get(sid)
+    if not s:
+        raise HTTPException(404, "Stream not found")
+    out = {"status": s["status"], "error": s.get("error")}
+    if s["status"] == "ready":
+        # Rewrite m3u8 through CDN proxy
+        proxied = f"/api/proxy?url={urllib.parse.quote(s['m3u8'], safe='')}" if s["m3u8"] else None
+        out["m3u8"]  = proxied
+        out["subs"]  = [{"label": sub["label"], "url": f"/api/stream/sub/{sid}/{i}"}
+                        for i, sub in enumerate(s["subs"])]
+    return out
+
+
+@app.get("/api/stream/sub/{sid}/{idx}", dependencies=[Depends(verify)])
+async def stream_sub(sid: str, idx: int):
+    with _streams_lock:
+        s = _streams.get(sid)
+    if not s:
+        raise HTTPException(404, "Stream not found")
+    subs = s.get("subs", [])
+    if idx >= len(subs):
+        raise HTTPException(404, "Subtitle not found")
+    fpath = Path(subs[idx]["path"])
+    if not fpath.exists():
+        raise HTTPException(404, "Subtitle file missing")
+    srt = fpath.read_text(encoding="utf-8", errors="replace")
+    # Convert SRT → WebVTT (browsers require VTT for <track>)
+    vtt = "WEBVTT\n\n" + srt.replace("\r\n", "\n").replace(",", ".", 1)
+    # Fix all timestamp commas to dots
+    import re as _re
+    vtt = _re.sub(r"(\d{2}:\d{2}:\d{2}),(\d{3})", r"\1.\2", "WEBVTT\n\n" + srt)
+    return Response(
+        content=vtt.encode("utf-8"),
+        media_type="text/vtt; charset=utf-8",
+        headers={"Access-Control-Allow-Origin": "*"}
+    )
+
+
 # ── Health + UI ───────────────────────────────────────────────────────────────
 
 @app.get("/health")
@@ -594,3 +658,110 @@ if __name__ == "__main__":
     PORT = int(os.environ.get("PORT", 9090))
     uvicorn.run(app, host="0.0.0.0", port=PORT)
 
+
+# ── Live stream ───────────────────────────────────────────────────────────────
+
+LIVE_URL = os.environ.get("LIVE_URL", "")
+
+LIVE_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    "Referer":    "https://24start.net/",
+    "Origin":     "https://24start.net",
+}
+
+@app.get("/live", response_class=HTMLResponse)
+async def live_page():
+    return open("live.html").read()
+
+
+@app.get("/api/live/stream")
+async def live_stream():
+    """Fetch master playlist from LIVE_URL, rewrite segment URLs through /api/live/proxy."""
+    if not LIVE_URL:
+        raise HTTPException(503, "LIVE_URL not configured")
+    try:
+        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+            r = await client.get(LIVE_URL, headers=LIVE_HEADERS)
+            r.raise_for_status()
+            master = r.text
+
+        # Rewrite all URLs in the playlist to go through our proxy
+        base = LIVE_URL.rsplit("/", 1)[0] + "/"
+        lines = []
+        for line in master.splitlines():
+            stripped = line.strip()
+            if stripped and not stripped.startswith("#"):
+                abs_url = stripped if stripped.startswith("http") else base + stripped
+                line = f"/api/live/proxy?url={urllib.parse.quote(abs_url, safe='')}"
+            lines.append(line)
+
+        return Response(
+            content="\n".join(lines).encode(),
+            media_type="application/vnd.apple.mpegurl",
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Cache-Control": "no-cache, no-store",
+            }
+        )
+    except Exception as e:
+        log(f"Live stream error: {e}")
+        raise HTTPException(502, f"Could not fetch stream: {e}")
+
+
+@app.get("/api/live/proxy")
+async def live_proxy(url: str):
+    """Proxy live stream playlists and segments, rewriting nested playlist URLs."""
+    parsed = urllib.parse.urlparse(url)
+    allowed = (
+        "storage.googleapis.com",
+        "24start.net",
+        "peulleieo.net",
+        "boanki.net",
+    )
+    if not any(parsed.netloc.endswith(d) for d in allowed):
+        raise HTTPException(403, f"Domain not allowed: {parsed.netloc}")
+
+    try:
+        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+            r = await client.get(url, headers=LIVE_HEADERS)
+            r.raise_for_status()
+
+        ct = r.headers.get("content-type", "application/octet-stream")
+
+        # Rewrite nested playlists (media playlists inside a master)
+        if "mpegurl" in ct or url.split("?")[0].endswith(".m3u8"):
+            base = url.rsplit("/", 1)[0] + "/"
+            lines = []
+            for line in r.text.splitlines():
+                stripped = line.strip()
+                if stripped and not stripped.startswith("#"):
+                    abs_url = stripped if stripped.startswith("http") else base + stripped
+                    line = f"/api/live/proxy?url={urllib.parse.quote(abs_url, safe='')}"
+                lines.append(line)
+            return Response(
+                content="\n".join(lines).encode(),
+                media_type="application/vnd.apple.mpegurl",
+                headers={
+                    "Access-Control-Allow-Origin": "*",
+                    "Cache-Control": "no-cache, no-store",
+                }
+            )
+
+        # Segments — stream through
+        return Response(
+            content=r.content,
+            media_type=ct,
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Cache-Control": "max-age=60",
+            }
+        )
+
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(e.response.status_code, f"Upstream error: {e}")
+    except Exception as e:
+        log(f"Live proxy error: {e}")
+        raise HTTPException(502, f"Proxy error: {e}")
+
+
+        
