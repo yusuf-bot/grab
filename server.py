@@ -59,7 +59,7 @@ if not API_KEY:
 if not TMDB_KEY:
     raise RuntimeError("TMDB_KEY not set")
 
-TMDB_BASE = "https://api.themoviedb.org/3"
+TMDB_BASE = "https://blue-block-2520.yusuff-0279.workers.dev/"
 TMDB_IMG  = "https://image.tmdb.org/t/p/w92"
 
 CDN_HEADERS = {
@@ -693,6 +693,8 @@ async def live_stream():
             if stripped and not stripped.startswith("#"):
                 abs_url = stripped if stripped.startswith("http") else base + stripped
                 line = f"/api/live/proxy?url={urllib.parse.quote(abs_url, safe='')}"
+            else:
+                line=stripped
             lines.append(line)
 
         return Response(
@@ -737,6 +739,8 @@ async def live_proxy(url: str):
                 if stripped and not stripped.startswith("#"):
                     abs_url = stripped if stripped.startswith("http") else base + stripped
                     line = f"/api/live/proxy?url={urllib.parse.quote(abs_url, safe='')}"
+                else:
+                    line=stripped
                 lines.append(line)
             return Response(
                 content="\n".join(lines).encode(),
