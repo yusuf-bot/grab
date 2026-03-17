@@ -6,6 +6,9 @@
 <title>grab</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7/dist/hls.min.js"></script>
+<script type="module" src="https://cdn.jsdelivr.net/npm/@videojs/html/cdn/video.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@videojs/html/cdn/video.css">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -167,10 +170,10 @@
   .player-wrap {
     position: relative;
     width: 100%;
+    aspect-ratio: 16/9;
+    background: #000;
     border-radius: 14px;
     overflow: hidden;
-    background: #000;
-    aspect-ratio: 16/9;
   }
 
   video-player {
@@ -179,16 +182,14 @@
     height: 100%;
   }
 
-  video-minimal-skin {
+  video-skin {
+    --media-primary-color: #c8f065;
     --media-border-radius: 14px;
-    color: var(--accent);
+    display: block;
+    width: 100%;
+    height: 100%;
   }
 
-  /* Hide seek/rate for streams — no VOD scrubbing */
-  .player-wrap media-seek-button,
-  .player-wrap media-playback-rate-button { display: none !important; }
-
-  /* Player loading overlay */
   #player-overlay {
     position: absolute;
     inset: 0;
@@ -217,7 +218,6 @@
     text-align: center;
   }
 
-  /* Player meta row */
   .player-meta {
     display: flex;
     align-items: center;
@@ -234,9 +234,6 @@
 
   .hidden { display: none !important; }
 </style>
-<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7/dist/hls.min.js"></script>
-<script type="module" src="https://cdn.jsdelivr.net/npm/@videojs/html/cdn/video-minimal.js"></script>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@videojs/html/cdn/video-minimal.css">
 </head>
 <body>
 <div id="app">
@@ -290,15 +287,14 @@
       </div>
     </div>
 
-
     <!-- Player view -->
     <div id="view-player" class="hidden">
       <button class="back-btn" id="player-back-btn" onclick="closePlayer()">← back</button>
       <div class="player-wrap">
         <video-player>
-          <video-minimal-skin>
-            <video id="player-vid" slot="media" playsinline autoplay muted></video>
-          </video-minimal-skin>
+          <video-skin>
+            <video id="player-vid" slot="media" crossorigin="anonymous" playsinline autoplay muted></video>
+          </video-skin>
         </video-player>
         <div id="player-overlay">
           <div class="player-overlay-spinner"></div>
@@ -337,9 +333,9 @@ const SERVER_URL = window.location.origin;
 const API_KEY    = 'desmos';
 
 // ── State ─────────────────────────────────────────────────────────────────────
-let currentResults  = [];   // TMDB search results
-let currentDetail   = null; // full detail object from /api/detail
-let currentEpisodes = [];   // episodes from /api/season
+let currentResults  = [];
+let currentDetail   = null;
+let currentEpisodes = [];
 let currentSeason   = null;
 let selectedEps     = new Set();
 let jobs            = {};
@@ -419,7 +415,6 @@ function renderResults() {
     list.innerHTML = '<div class="empty">No results</div>';
     return;
   }
-  // TMDB fields: r.title, r.tmdb_id, r.imdb_id, r.year, r.type, r.rating
   list.innerHTML = currentResults.map((r, i) => `
     <div class="card" onclick="pickTitle(${i})">
       <div class="card-body">
@@ -433,8 +428,7 @@ function renderResults() {
 
 async function pickTitle(i) {
   const r = currentResults[i];
-  currentDetail = r; // store the search result; detail will be loaded below
-
+  currentDetail = r;
   if (r.type === "movie") {
     showView("movie");
     await loadMovieDetail(r.tmdb_id);
@@ -449,19 +443,18 @@ async function loadMovieDetail(tmdbId) {
   const el = document.getElementById("movie-detail");
   el.innerHTML = '<div class="spinner" style="margin:20px auto"></div>';
   try {
-    // TMDB detail: d.title, d.year, d.genres, d.rating, d.overview, d.imdb_id, d.runtime
     const d = await api(`/api/detail?tmdb_id=${tmdbId}&type=movie`);
-    currentDetail = d; // update with full detail
+    currentDetail = d;
     const safeTitle = d.title.replace(/'/g, "\\'");
     el.innerHTML = `
       <div class="movie-detail">
         <div class="movie-title">${d.title} <span style="color:var(--muted);font-weight:300">(${d.year})</span></div>
         <div class="movie-meta">${[d.genres, d.runtime ? d.runtime + " min" : "", d.rating ? "★ " + d.rating : ""].filter(Boolean).join(" · ")}</div>
         ${d.overview ? `<div class="movie-plot">${d.overview}</div>` : ""}
-        <button class="btn-primary" style="margin-top:8px"
-          onclick="queueDownload({type:'movie',imdb:'${d.imdb_id}',label:'${safeTitle}',season:0,episode:0})">
-          Download
-        </button>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button class="btn-primary" onclick="openMoviePlayer('${d.imdb_id}','${safeTitle}')">Watch</button>
+          <button class="btn-ghost" onclick="queueDownload({type:'movie',imdb:'${d.imdb_id}',label:'${safeTitle}',season:0,episode:0})">Download</button>
+        </div>
       </div>
     `;
   } catch(e) {
@@ -475,9 +468,8 @@ async function loadSeasons(tmdbId, title) {
   const grid = document.getElementById("season-grid");
   grid.innerHTML = '<div class="spinner" style="margin:12px 0"></div>';
   try {
-    // TMDB detail: d.total_seasons
     const d = await api(`/api/detail?tmdb_id=${tmdbId}&type=tv`);
-    currentDetail = d; // update with full detail including imdb_id
+    currentDetail = d;
     const n = d.total_seasons || 1;
     grid.innerHTML = Array.from({length: n}, (_, i) => i + 1).map(s =>
       `<button class="season-btn" onclick="pickSeason(${s})">${s}</button>`
@@ -504,7 +496,6 @@ async function loadEpisodes(tmdbId, season) {
   list.innerHTML = '<div class="spinner" style="margin:12px 0"></div>';
   document.getElementById("sel-bar").classList.add("hidden");
   try {
-    // TMDB season: ep.episode, ep.title, ep.rating, ep.air_date, ep.overview
     currentEpisodes = await api(`/api/season?tmdb_id=${tmdbId}&s=${season}`);
     renderEpisodes();
   } catch(e) {
@@ -547,7 +538,7 @@ async function downloadSelected() {
   for (const ep of eps) {
     queueDownload({
       type:    "tv",
-      imdb:    currentDetail.imdb_id,   // imdb_id from TMDB detail
+      imdb:    currentDetail.imdb_id,
       season:  currentSeason,
       episode: ep.episode,
       label:   `${currentDetail.title} S${String(currentSeason).padStart(2,"0")}E${String(ep.episode).padStart(2,"0")}`,
@@ -601,7 +592,6 @@ async function queueDownload(payload) {
     triggerSave(blob, stem + ".mp4");
     set("done", `MP4 saved · ${(blob.size / 1_048_576).toFixed(1)} MB`, 100);
 
-    // Subtitle — best effort
     try {
       const subPath = payload.type === "tv"
         ? `/api/subtitle?imdb=${payload.imdb}&season=${payload.season}&episode=${payload.episode}`
@@ -630,8 +620,8 @@ function triggerSave(blob, filename) {
 
 // ── Jobs UI ───────────────────────────────────────────────────────────────────
 function renderJobs() {
-  const list   = document.getElementById("jobs-list");
-  const all    = Object.values(jobs).reverse();
+  const list = document.getElementById("jobs-list");
+  const all  = Object.values(jobs).reverse();
   if (!all.length) { list.innerHTML = '<div class="empty">No downloads yet</div>'; return; }
   const active = s => ["extracting","downloading"].includes(s);
   list.innerHTML = all.map(j => `
@@ -656,11 +646,10 @@ function clearDoneJobs() {
   renderJobs();
 }
 
-
 // ── Player ────────────────────────────────────────────────────────────────────
-let playerHls      = null;
-let playerStreamId = null;
-let playerPayload  = null; // for download button
+let playerHls       = null;
+let playerStreamId  = null;
+let playerPayload   = null;
 let playerPollTimer = null;
 
 function openEpisodePlayer(i) {
@@ -681,7 +670,6 @@ function openMoviePlayer(imdb, label) {
 }
 
 async function _openPlayer(label, startUrl) {
-  // Reset state
   if (playerHls) { playerHls.destroy(); playerHls = null; }
   clearTimeout(playerPollTimer);
   playerStreamId = null;
@@ -692,7 +680,6 @@ async function _openPlayer(label, startUrl) {
   document.getElementById("player-dl-btn").disabled = true;
   showView("player");
 
-  // Kick off extraction
   try {
     const r = await fetch(SERVER_URL + startUrl, {
       method: "POST",
@@ -709,7 +696,7 @@ async function _openPlayer(label, startUrl) {
 
 async function pollStream(sid) {
   try {
-    const r  = await fetch(`${SERVER_URL}/api/stream/status/${sid}`, { headers: { "x-api-key": API_KEY } });
+    const r    = await fetch(`${SERVER_URL}/api/stream/status/${sid}`, { headers: { "x-api-key": API_KEY } });
     const data = await r.json();
 
     if (data.status === "extracting") {
@@ -717,12 +704,10 @@ async function pollStream(sid) {
       playerPollTimer = setTimeout(() => pollStream(sid), 2000);
       return;
     }
-
     if (data.status === "error") {
       document.getElementById("player-overlay-text").textContent = data.error || "Stream extraction failed";
       return;
     }
-
     if (data.status === "ready") {
       document.getElementById("player-dl-btn").disabled = false;
       playStream(data.m3u8, data.subs || []);
@@ -735,34 +720,38 @@ async function pollStream(sid) {
 function playStream(m3u8Url, subs) {
   const vid = document.getElementById("player-vid");
 
-  // Load subtitles
-  // Remove old tracks
-  while (vid.firstChild) vid.removeChild(vid.firstChild);
-  subs.forEach((sub, i) => {
-    const track = document.createElement("track");
-    track.kind    = "subtitles";
-    track.label   = sub.label;
-    track.srclang = "en";
-    track.src     = SERVER_URL + sub.url;
-    if (i === 0) track.default = true;
-    vid.appendChild(track);
-  });
+  vid.querySelectorAll("track").forEach(t => t.remove());
+  vid.crossOrigin = "anonymous";
 
   if (playerHls) { playerHls.destroy(); playerHls = null; }
+
+  const setupSubs = () => {
+    subs.forEach((sub, i) => {
+      const track = document.createElement("track");
+      track.kind    = "subtitles";
+      track.label   = sub.label;
+      track.srclang = "en";
+      track.src     = sub.url.startsWith("http") ? sub.url : SERVER_URL + sub.url;
+      track.default = (i === 0);
+      vid.appendChild(track);
+    });
+  };
 
   if (Hls.isSupported()) {
     playerHls = new Hls({ maxBufferLength: 60 });
     playerHls.loadSource(SERVER_URL + m3u8Url);
     playerHls.attachMedia(vid);
     playerHls.on(Hls.Events.MANIFEST_PARSED, () => {
+      setupSubs();
       document.getElementById("player-overlay").classList.add("hidden");
-      vid.play().catch(() => { vid.muted = false; vid.play(); });
+      vid.play().catch(() => { vid.muted = true; vid.play(); });
     });
     playerHls.on(Hls.Events.ERROR, (_, d) => {
       if (d.fatal) document.getElementById("player-overlay-text").textContent = "Stream error — try downloading instead";
     });
   } else if (vid.canPlayType("application/vnd.apple.mpegurl")) {
     vid.src = SERVER_URL + m3u8Url;
+    setupSubs();
     vid.addEventListener("loadedmetadata", () => {
       document.getElementById("player-overlay").classList.add("hidden");
       vid.play();
@@ -773,7 +762,6 @@ function playStream(m3u8Url, subs) {
 function closePlayer() {
   if (playerHls) { playerHls.destroy(); playerHls = null; }
   clearTimeout(playerPollTimer);
-  // Go back to episodes or results depending on type
   if (playerPayload?.type === "tv") goBack("episodes");
   else goBack("results");
 }

@@ -28,6 +28,7 @@ import urllib.parse
 import xmlrpc.client
 from pathlib import Path
 from typing import Optional, AsyncGenerator
+from playwright.async_api import async_playwright
 
 import httpx
 from fastapi import FastAPI, HTTPException, Header, Depends
@@ -172,7 +173,7 @@ async def season(tmdb_id: int, s: int):
 
 async def extract_m3u8(imdb_id: str, season: int, episode: int, media_type: str = "tv") -> Optional[str]:
     if not imdb_id:
-        raise HTTPException(422, "No IMDB ID available for this title")
+        return None
 
     if media_type == "tv":
         vidsrc_url = f"https://vidsrc.io/embed/tv?imdb={imdb_id}&season={season}&episode={episode}"
@@ -181,9 +182,10 @@ async def extract_m3u8(imdb_id: str, season: int, episode: int, media_type: str 
 
     log(f"Fetching: {vidsrc_url}")
 
+    # --- Step 1: Initial Link Extraction ---
     iframe_url = None
     for attempt in range(3):
-        curl_cmd = ["curl", "-s", vidsrc_url, "-H", "User-Agent: Mozilla/5.0", "-L"]
+        curl_cmd = ["curl", "-s", vidsrc_url, "-H", "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36", "-L"]
         if TOR_PROXY:
             curl_cmd.extend(["-x", TOR_PROXY])
         try:
@@ -191,70 +193,82 @@ async def extract_m3u8(imdb_id: str, season: int, episode: int, media_type: str 
             matches = re.findall(r'cloudnestra\.com/rcp/([^"]+)"', result.stdout)
             if matches:
                 iframe_url = "https://cloudnestra.com/rcp/" + matches[0]
-                log(f"Got iframe: {iframe_url}")
                 break
-            if attempt < 2:
-                await asyncio.sleep(2)
+            await asyncio.sleep(2)
         except Exception as e:
-            log(f"Curl error: {e}")
-            if attempt < 2:
-                await asyncio.sleep(2)
+            log(f"Initial fetch error: {e}")
 
     if not iframe_url:
-        log("Could not find iframe URL")
         return None
 
-    from playwright.async_api import async_playwright
+    # --- Step 2: Playwright Logic ---
     m3u8_url = None
 
     async with async_playwright() as p:
+        # 1. Use args to hide automation
         browser = await p.chromium.launch(
-            headless=True,
+            headless=True, 
             args=["--disable-blink-features=AutomationControlled", "--no-sandbox"]
         )
         context = await browser.new_context(
-            viewport={"width": 1920, "height": 1080},
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            **({"proxy": {"server": TOR_PROXY}} if TOR_PROXY else {})
+            viewport={"width": 1280, "height": 720},
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
         )
+        
         page = await context.new_page()
+
+        # 2. Stealth Script: Deep-hide webdriver property
         await page.add_init_script("""
             Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
             window.chrome = {runtime: {}};
         """)
 
+        # 3. Listener (Must be BEFORE page.goto)
         def on_request(request):
             nonlocal m3u8_url
             if ".m3u8" in request.url and not m3u8_url:
-                m3u8_url = request.url
-                log(f"✅ M3U8: {request.url}")
+                # Prioritize master playlists or index files
+                if any(x in request.url for x in ["master", "index", "playlist", "m3u8"]):
+                    m3u8_url = request.url
+                    log(f"✅ Found M3U8: {m3u8_url}")
 
         page.on("request", on_request)
 
         try:
-            await page.goto(iframe_url, wait_until="networkidle", timeout=30000)
-        except Exception as e:
-            log(f"Navigation warning: {e}")
+            # Navigate with a generous timeout
+            await page.goto(iframe_url, wait_until="load", timeout=30000)
+            await page.wait_for_timeout(3000) # Wait for player to init
 
-        await page.wait_for_timeout(3000)
-
-        if not m3u8_url:
-            try:
-                if await page.locator("video").count() > 0:
-                    await page.click("video", timeout=2000)
+            # 4. The "Triple-Threat" Click Strategy
+            if not m3u8_url:
+                log("M3U8 not caught on load. Forcing interaction...")
+                
+                # Check for that specific pjsdiv you found
+                overlay = page.locator("pjsdiv")
+                if await overlay.count() > 0:
+                    # 'force=True' bypasses Playwright's check that says "something is covering this"
+                    await overlay.first.click(force=True)
                 else:
-                    await page.mouse.click(960, 540)
-            except Exception:
-                pass
+                    # Click the exact center of the player container
+                    await page.mouse.click(640, 360)
+
+                # Wait for any popup/new tab to trigger and click again
+                await page.wait_for_timeout(2000)
+                if not m3u8_url:
+                    # Second click often clears the 'hidden' ad layer
+                    await page.mouse.click(640, 360)
+
+            # Polling for the URL
             for _ in range(15):
-                if m3u8_url:
-                    break
+                if m3u8_url: break
                 await page.wait_for_timeout(1000)
 
-        await browser.close()
+        except Exception as e:
+            log(f"Playwright error: {e}")
+        finally:
+            await browser.close()
 
     return m3u8_url
-
 
 # ── Segment downloader ────────────────────────────────────────────────────────
 
@@ -425,6 +439,57 @@ async def download_movie(imdb: str):
 
 
 # ── Subtitles ─────────────────────────────────────────────────────────────────
+
+# --- Add this before or after your other routes ---
+
+@app.get("/api/proxy")
+async def proxy_m3u8(url: str):
+    """
+    Proxies the M3U8 playlist and rewrites internal segment URLs 
+    to ensure they also pass through this proxy.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+            # Use the CDN_HEADERS defined at the top of your script
+            # This is CRITICAL to avoid the 404 on neonhorizonworkshops
+            r = await client.get(url, headers=CDN_HEADERS)
+            r.raise_for_status()
+
+        # If it's a playlist, we MUST rewrite the links inside it
+        if ".m3u8" in url.split("?")[0] or "mpegurl" in r.headers.get("content-type", ""):
+            base_url = url.rsplit("/", 1)[0] + "/"
+            lines = []
+            for line in r.text.splitlines():
+                stripped = line.strip()
+                if stripped and not stripped.startswith("#"):
+                    # Convert relative URL to absolute
+                    abs_url = stripped if stripped.startswith("http") else urllib.parse.urljoin(base_url, stripped)
+                    # Point the segment back to this proxy
+                    line = f"/api/proxy?url={urllib.parse.quote(abs_url, safe='')}"
+                lines.append(line)
+            
+            return Response(
+                content="\n".join(lines).encode(),
+                media_type="application/vnd.apple.mpegurl",
+                headers={"Access-Control-Allow-Origin": "*"}
+            )
+
+        # For actual video segments (.ts / .m4s), just stream the bytes
+        return Response(
+            content=r.content,
+            media_type=r.headers.get("content-type", "video/mp2t"),
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Cache-Control": "max-age=3600"
+            }
+        )
+
+    except httpx.HTTPStatusError as e:
+        log(f"Proxy Upstream Error: {e.response.status_code} for {url}")
+        raise HTTPException(e.response.status_code, "Upstream stream provider denied access")
+    except Exception as e:
+        log(f"Proxy Error: {e}")
+        raise HTTPException(502, f"Proxy failed: {e}")
 
 class _OSTransport(xmlrpc.client.SafeTransport):
     def send_headers(self, connection, headers):
@@ -637,10 +702,14 @@ async def stream_sub(sid: str, idx: int):
     import re as _re
     vtt = _re.sub(r"(\d{2}:\d{2}:\d{2}),(\d{3})", r"\1.\2", "WEBVTT\n\n" + srt)
     return Response(
-        content=vtt.encode("utf-8"),
-        media_type="text/vtt; charset=utf-8",
-        headers={"Access-Control-Allow-Origin": "*"}
-    )
+            content=vtt.encode("utf-8"),
+            media_type="text/vtt; charset=utf-8",
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, OPTIONS",
+                "Content-Type": "text/vtt; charset=utf-8"
+            }
+        )
 
 
 # ── Health + UI ───────────────────────────────────────────────────────────────
@@ -649,17 +718,10 @@ async def stream_sub(sid: str, idx: int):
 async def health():
     return {"status": "ok"}
 
-@app.get("/", response_class=HTMLResponse)
-async def ui():
-    return open("ui.html").read()
-
-if __name__ == "__main__":
-    import uvicorn
-    PORT = int(os.environ.get("PORT", 9090))
-    uvicorn.run(app, host="0.0.0.0", port=PORT)
 
 
-# ── Live stream ───────────────────────────────────────────────────────────────
+
+
 
 LIVE_URL = os.environ.get("LIVE_URL", "")
 
@@ -669,9 +731,16 @@ LIVE_HEADERS = {
     "Origin":     "https://24start.net",
 }
 
+BASE_DIR = Path(__file__).parent
+
+# Then replace:
+@app.get("/", response_class=HTMLResponse)
+async def ui():
+    return (BASE_DIR / "ui.html").read_text()
+
 @app.get("/live", response_class=HTMLResponse)
 async def live_page():
-    return open("live.html").read()
+    return (BASE_DIR / "live.html").read_text()
 
 
 @app.get("/api/live/stream")
@@ -710,18 +779,21 @@ async def live_stream():
         raise HTTPException(502, f"Could not fetch stream: {e}")
 
 
+LIVE_ALLOWED = (
+    "storage.googleapis.com",
+    "24start.net",
+    "peulleieo.net",
+    "boanki.net",
+    "cloudfront.net",          # add if your stream uses it
+    "d3izosn7ff2iru.cloudfront.net",
+)
+
 @app.get("/api/live/proxy")
 async def live_proxy(url: str):
-    """Proxy live stream playlists and segments, rewriting nested playlist URLs."""
     parsed = urllib.parse.urlparse(url)
-    allowed = (
-        "storage.googleapis.com",
-        "24start.net",
-        "peulleieo.net",
-        "boanki.net",
-    )
-    if not any(parsed.netloc.endswith(d) for d in allowed):
-        raise HTTPException(403, f"Domain not allowed: {parsed.netloc}")
+    if not any(parsed.netloc.endswith(d) for d in LIVE_ALLOWED):
+        # Silently return empty instead of spamming 403
+        return Response(content=b"", status_code=204)
 
     try:
         async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
@@ -729,36 +801,28 @@ async def live_proxy(url: str):
             r.raise_for_status()
 
         ct = r.headers.get("content-type", "application/octet-stream")
+        is_playlist = "mpegurl" in ct or url.split("?")[0].endswith(".m3u8")
 
-        # Rewrite nested playlists (media playlists inside a master)
-        if "mpegurl" in ct or url.split("?")[0].endswith(".m3u8"):
+        if is_playlist:
             base = url.rsplit("/", 1)[0] + "/"
             lines = []
             for line in r.text.splitlines():
                 stripped = line.strip()
+                # Only rewrite bare segment/playlist URLs, not tag lines
                 if stripped and not stripped.startswith("#"):
-                    abs_url = stripped if stripped.startswith("http") else base + stripped
+                    abs_url = stripped if stripped.startswith("http") else urllib.parse.urljoin(base, stripped)
                     line = f"/api/live/proxy?url={urllib.parse.quote(abs_url, safe='')}"
-                else:
-                    line=stripped
                 lines.append(line)
             return Response(
                 content="\n".join(lines).encode(),
                 media_type="application/vnd.apple.mpegurl",
-                headers={
-                    "Access-Control-Allow-Origin": "*",
-                    "Cache-Control": "no-cache, no-store",
-                }
+                headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "no-cache"}
             )
 
-        # Segments — stream through
         return Response(
             content=r.content,
             media_type=ct,
-            headers={
-                "Access-Control-Allow-Origin": "*",
-                "Cache-Control": "max-age=60",
-            }
+            headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "max-age=60"}
         )
 
     except httpx.HTTPStatusError as e:
@@ -766,6 +830,12 @@ async def live_proxy(url: str):
     except Exception as e:
         log(f"Live proxy error: {e}")
         raise HTTPException(502, f"Proxy error: {e}")
-
-
         
+
+if __name__ == "__main__":
+    import uvicorn
+    PORT = int(os.environ.get("PORT", 9090))
+    uvicorn.run(app, host="0.0.0.0", port=PORT)
+
+
+# ── Live stream ───────────────────────────────────────────────────────────────

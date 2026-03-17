@@ -8,8 +8,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7/dist/hls.min.js"></script>
-<script type="module" src="https://cdn.jsdelivr.net/npm/@videojs/html/cdn/video-minimal.js"></script>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@videojs/html/cdn/video-minimal.css">
+<script type="module" src="https://cdn.jsdelivr.net/npm/@videojs/html/cdn/video.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@videojs/html/cdn/video.css">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -44,7 +44,6 @@
     padding-bottom: env(safe-area-inset-bottom, 0);
   }
 
-  /* ── Top bar ── */
   #top-bar {
     display: flex;
     align-items: center;
@@ -101,13 +100,13 @@
   #refresh-btn:hover { color: var(--text); border-color: #444; }
   #refresh-btn:active { transform: scale(0.96); }
 
-  /* ── Player wrap ── */
   #player-wrap {
     flex: 1;
     min-height: 0;
     padding: 0 16px 16px;
     display: flex;
     flex-direction: column;
+    position: relative;
   }
 
   video-player {
@@ -118,30 +117,20 @@
     border-radius: 14px;
     overflow: hidden;
     background: #000;
-    position: relative;
   }
 
-  video-minimal-skin {
+  video-skin {
     --media-border-radius: 14px;
+    --media-primary-color: #c8f065;
     display: block;
     width: 100%;
     height: 100%;
   }
 
-  /* Hide seek buttons and time/progress bar — not useful for live */
-  media-seek-button,
-  .media-time-controls,
-  media-playback-rate-button { display: none !important; }
-
-  /* Accent color for controls */
-  video-minimal-skin {
-    color: var(--accent);
-  }
-
-  /* ── Loading / error overlay ── */
   #overlay {
     position: absolute;
     inset: 0;
+    margin: 0 16px 16px;
     border-radius: 14px;
     display: flex;
     flex-direction: column;
@@ -198,16 +187,16 @@
   </div>
 
   <div id="player-wrap">
-    <video-player style="position:relative">
-      <video-minimal-skin>
+    <video-player>
+      <video-skin>
         <video id="vid" slot="media" playsinline autoplay muted></video>
-      </video-minimal-skin>
-      <div id="overlay">
-        <div class="overlay-spinner" id="spinner"></div>
-        <div id="overlay-text">Loading stream…</div>
-        <button id="overlay-retry" onclick="reload()">Retry</button>
-      </div>
+      </video-skin>
     </video-player>
+    <div id="overlay">
+      <div class="overlay-spinner" id="spinner"></div>
+      <div id="overlay-text">Loading stream…</div>
+      <button id="overlay-retry" onclick="reload()">Retry</button>
+    </div>
   </div>
 
 </div>
@@ -228,15 +217,15 @@ const MAX      = 5;
 
 function setOverlay(msg, showRetry = false, showSpinner = true) {
   overlay.classList.remove("hidden");
-  oText.textContent          = msg;
-  oRetry.className           = showRetry ? "show" : "";
-  spinner.style.display      = showSpinner ? "block" : "none";
+  oText.textContent     = msg;
+  oRetry.className      = showRetry ? "show" : "";
+  spinner.style.display = showSpinner ? "block" : "none";
 }
 
 function hideOverlay() {
   overlay.classList.add("hidden");
-  badge.textContent  = "LIVE";
-  badge.className    = "";
+  badge.textContent = "LIVE";
+  badge.className   = "";
 }
 
 function reload() {
@@ -254,9 +243,9 @@ function start() {
 
   if (Hls.isSupported()) {
     hls = new Hls({
-      liveSyncDurationCount:    3,
+      liveSyncDurationCount:       3,
       liveMaxLatencyDurationCount: 6,
-      maxBufferLength:          30,
+      maxBufferLength:             30,
     });
     hls.loadSource(STREAM);
     hls.attachMedia(vid);
@@ -294,9 +283,6 @@ function start() {
     setOverlay("HLS not supported in this browser.", true, false);
   }
 }
-
-// tap video to unmute
-vid.addEventListener("click", () => { vid.muted = !vid.muted; });
 
 start();
 </script>
